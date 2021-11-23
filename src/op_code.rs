@@ -5,5 +5,10 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 pub enum OpCode {
     /// Load constant for use
     Constant,
+    Negate,
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
     Return,
 }
