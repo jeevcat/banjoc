@@ -15,11 +15,13 @@ impl Vm {
     }
 
     fn new(chunk: Chunk) -> Vm {
-        Vm {
+        let mut vm = Vm {
             ip: chunk.code.as_ptr(),
             chunk,
             stack: Stack::new(),
-        }
+        };
+        vm.stack.initialize();
+        vm
     }
 
     fn run(&mut self) -> Result {
@@ -33,14 +35,13 @@ impl Vm {
             let instruction = self.read_byte();
             if let Ok(instruction) = instruction.try_into() {
                 match instruction {
-                    OpCode::Add => self.binary_op(),
+                    OpCode::Add => self.binary_op(|a, b| a + b),
                     OpCode::Constant => {
                         let constant = self.read_constant();
                         self.stack.push(constant);
-                        println!("{}", constant);
                     }
-                    OpCode::Divide => todo!(),
-                    OpCode::Multiply => todo!(),
+                    OpCode::Divide => self.binary_op(|a, b| a / b),
+                    OpCode::Multiply => self.binary_op(|a, b| a * b),
                     OpCode::Negate => {
                         let value = -self.stack.pop();
                         self.stack.push(value);
@@ -49,16 +50,17 @@ impl Vm {
                         println!("{}", self.stack.pop());
                         return Ok(());
                     }
-                    OpCode::Subtract => todo!(),
+                    OpCode::Subtract => self.binary_op(|a, b| a - b),
                 }
             }
         }
     }
 
-    fn binary_op(&mut self) {
+    fn binary_op(&mut self, f: impl Fn(f64, f64) -> f64) {
         let b = self.stack.pop();
         let a = self.stack.pop();
-        self.stack.push(a + b);
+        let result = f(a, b);
+        self.stack.push(result);
     }
 
     fn read_byte(&mut self) -> u8 {
