@@ -1,3 +1,4 @@
+use crate::compiler;
 use crate::{error::Result, stack::Stack};
 
 use crate::{chunk::Chunk, op_code::OpCode, value::Value};
@@ -9,12 +10,7 @@ pub struct Vm {
 }
 
 impl Vm {
-    pub fn interpret(chunk: Chunk) -> Result {
-        let mut vm = Vm::new(chunk);
-        vm.run()
-    }
-
-    fn new(chunk: Chunk) -> Vm {
+    pub fn new(chunk: Chunk) -> Vm {
         let mut vm = Vm {
             ip: chunk.code.as_ptr(),
             chunk,
@@ -22,6 +18,11 @@ impl Vm {
         };
         vm.stack.initialize();
         vm
+    }
+
+    pub fn interpret(&mut self, source: &str) -> Result {
+        compiler::compile(source);
+        Ok(())
     }
 
     fn run(&mut self) -> Result {
