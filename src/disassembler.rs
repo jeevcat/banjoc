@@ -26,7 +26,7 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> usize {
     match OpCode::try_from(byte) {
         Ok(instruction) => match instruction {
             OpCode::Constant => constant_instruction(chunk, "OP_CONSTANT", offset),
-            OpCode::Negate => simple_instruction("OP_NEGATEE", offset),
+            OpCode::Negate => simple_instruction("OP_NEGATE", offset),
             OpCode::Return => simple_instruction("OP_RETURN", offset),
             OpCode::Add => simple_instruction("OP_ADD", offset),
             OpCode::Subtract => simple_instruction("OP_SUBTRACT", offset),

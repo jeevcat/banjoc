@@ -1,9 +1,11 @@
-use std::{env, fs, io::{self, Write}, process};
+use std::{
+    env, fs,
+    io::{self, Write},
+    process,
+};
 
 use error::LoxError;
 use vm::Vm;
-
-use crate::{chunk::Chunk, op_code::OpCode};
 
 mod chunk;
 #[cfg(feature = "debug_trace_execution")]
@@ -11,8 +13,8 @@ mod compiler;
 mod disassembler;
 mod error;
 mod op_code;
-mod stack;
 mod scanner;
+mod stack;
 mod value;
 mod vm;
 
@@ -55,6 +57,7 @@ fn main() {
         2 => run_file(&mut vm, &args[1]),
         _ => {
             eprintln!("Usage: clox [path]");
-            process::exit(64);},
+            process::exit(64);
+        }
     }
 }

@@ -160,13 +160,13 @@ impl<'source> Scanner<'source> {
                 b'a' => self.check_keyword(2, "lse", TokenType::False),
                 b'o' => self.check_keyword(2, "r", TokenType::For),
                 b'u' => self.check_keyword(2, "n", TokenType::Fun),
-            _ => TokenType::Identifier,
-            }
+                _ => TokenType::Identifier,
+            },
             b't' if self.current - self.start > 1 => match self.source.as_bytes()[self.start + 1] {
                 b'h' => self.check_keyword(2, "is", TokenType::This),
                 b'r' => self.check_keyword(2, "ue", TokenType::True),
-            _ => TokenType::Identifier,
-            }
+                _ => TokenType::Identifier,
+            },
             _ => TokenType::Identifier,
         }
     }
@@ -220,6 +220,16 @@ pub struct Token<'source> {
     pub token_type: TokenType,
     pub lexeme: &'source str,
     pub line: u32,
+}
+
+impl<'source> Token<'source> {
+    pub fn none() -> Token<'source> {
+        Token {
+            token_type: TokenType::Error,
+            lexeme: "",
+            line: 0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, IntoPrimitive, EnumIter, EnumCount)]
