@@ -5,11 +5,14 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 pub enum OpCode {
     /// Load constant for use
     Constant,
+
+    Not,
     Negate,
     Add,
     Subtract,
     Multiply,
     Divide,
+
     Return,
 
     // Literals stored directly as instructions

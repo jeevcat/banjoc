@@ -7,6 +7,16 @@ pub enum Value {
     Number(f64),
 }
 
+impl Value {
+    pub fn is_falsey(&self) -> bool {
+        match self {
+            Value::Bool(b) => !b,
+            Value::Nil => true,
+            Value::Number(_) => false,
+        }
+    }
+}
+
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

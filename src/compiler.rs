@@ -93,6 +93,7 @@ impl<'source> Parser<'source> {
         // Emit the operator instruction.
         match operator_type {
             TokenType::Minus => self.emit_opcode(OpCode::Negate),
+            TokenType::Bang => self.emit_opcode(OpCode::Not),
             _ => unreachable!(),
         }
     }
@@ -304,7 +305,7 @@ impl<'source> ParseRuleTable<'source> {
             Semicolon =>    ParseRule::new(None,                   None,                 P::None),
             Slash =>        ParseRule::new(None,                   Some(Parser::binary), P::Factor),
             Star =>         ParseRule::new(None,                   Some(Parser::binary), P::Factor),
-            Bang =>         ParseRule::new(None,                   None,                 P::None),
+            Bang =>         ParseRule::new(Some(Parser::unary),    None,                 P::None),
             BangEqual =>    ParseRule::new(None,                   None,                 P::None),
             Equal =>        ParseRule::new(None,                   None,                 P::None),
             EqualEqual =>   ParseRule::new(None,                   None,                 P::None),
