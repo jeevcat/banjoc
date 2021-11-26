@@ -1,37 +1,49 @@
-use crate::compiler;
-use crate::{error::Result, stack::Stack};
+use std::ptr::null;
+
+use crate::{
+    compiler,
+    error::{LoxError, Result},
+    stack::Stack,
+};
 
 use crate::{chunk::Chunk, op_code::OpCode, value::Value};
 
 pub struct Vm {
-    chunk: Chunk,
+    chunk: Option<Chunk>,
     ip: *const u8,
     stack: Stack,
 }
 
 impl Vm {
-    pub fn new(chunk: Chunk) -> Vm {
+    pub fn new() -> Vm {
         let mut vm = Vm {
-            ip: chunk.code.as_ptr(),
-            chunk,
+            ip: null(),
+            chunk: None,
             stack: Stack::new(),
         };
         vm.stack.initialize();
         vm
     }
 
-    pub fn interpret(&mut self, source: &str) -> Result {
-        compiler::compile(source);
-        Ok(())
+    pub fn interpret(&mut self, source: &str) -> Result<()> {
+        let chunk = compiler::compile(source)?;
+
+        self.ip = chunk.code.as_ptr();
+        self.chunk = Some(chunk);
+
+        self.run()
     }
 
-    fn run(&mut self) -> Result {
+    fn run(&mut self) -> Result<()> {
         loop {
             #[cfg(feature = "debug_trace_execution")]
             {
                 print!("        ");
                 println!("{:?}", self.stack);
-                crate::disassembler::disassemble_instruction_ptr(&self.chunk, self.ip);
+                match &self.chunk {
+                    Some(chunk) => crate::disassembler::disassemble_instruction_ptr(chunk, self.ip),
+                    None => return Err(LoxError::RuntimeError),
+                };
             }
             let instruction = self.read_byte();
             if let Ok(instruction) = instruction.try_into() {
@@ -72,6 +84,7 @@ impl Vm {
 
     fn read_constant(&mut self) -> Value {
         let index: usize = self.read_byte().try_into().unwrap();
-        self.chunk.constants[index]
+        // Only called when we know chunk is Some
+        self.chunk.as_ref().unwrap().constants[index]
     }
 }

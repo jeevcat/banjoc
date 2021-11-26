@@ -1,4 +1,4 @@
-pub type Result = std::result::Result<(), LoxError>;
+pub type Result<T> = std::result::Result<T, LoxError>;
 pub enum LoxError {
     CompileError,
     RuntimeError,

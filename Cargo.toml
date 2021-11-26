@@ -6,8 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["debug_trace_execution"]
+default = ["debug_trace_execution", "debug_print_code"]
 debug_trace_execution = []
+debug_print_code = []
 
 [dependencies]
 num_enum = "0.5"
+strum = { version = "0.23", features = ["derive"] }

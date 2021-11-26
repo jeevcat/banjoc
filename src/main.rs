@@ -49,8 +49,7 @@ fn run_file(vm: &mut Vm, path: &str) {
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let chunk = Chunk::new();
-    let mut vm = Vm::new(chunk);
+    let mut vm = Vm::new();
     match args.len() {
         1 => repl(&mut vm),
         2 => run_file(&mut vm, &args[1]),

@@ -1,3 +1,6 @@
+use num_enum::IntoPrimitive;
+use strum::{EnumCount, EnumIter};
+
 pub struct Scanner<'source> {
     source: &'source str,
     start: usize,
@@ -15,7 +18,7 @@ impl<'source> Scanner<'source> {
         }
     }
 
-    pub fn scan_token(&mut self) -> Token {
+    pub fn scan_token(&mut self) -> Token<'source> {
         self.skip_whitespace();
         self.start = self.current;
 
@@ -98,7 +101,7 @@ impl<'source> Scanner<'source> {
         }
     }
 
-    fn string(&mut self) -> Token {
+    fn string(&mut self) -> Token<'source> {
         while self.peek() != b'"' && !self.is_at_end() {
             if self.peek() == b'\n' {
                 self.line += 1;
@@ -114,7 +117,7 @@ impl<'source> Scanner<'source> {
         self.make_token(TokenType::String)
     }
 
-    fn number(&mut self) -> Token {
+    fn number(&mut self) -> Token<'source> {
         while self.peek().is_ascii_digit() {
             self.advance();
         }
@@ -133,7 +136,7 @@ impl<'source> Scanner<'source> {
         self.make_token(TokenType::Number)
     }
 
-    fn identifier(&mut self) -> Token {
+    fn identifier(&mut self) -> Token<'source> {
         while self.peek().is_ascii_alphanumeric() || self.peek() == b'_' {
             self.advance();
         }
@@ -194,7 +197,7 @@ impl<'source> Scanner<'source> {
     }
 
     /// Use start+current pointers in source to create a token
-    fn make_token(&self, token_type: TokenType) -> Token {
+    fn make_token(&self, token_type: TokenType) -> Token<'source> {
         Token {
             token_type,
             lexeme: &self.source[self.start..self.current],
@@ -202,7 +205,7 @@ impl<'source> Scanner<'source> {
         }
     }
 
-    fn error_token(&self, message: &'static str) -> Token {
+    fn error_token(&self, message: &'static str) -> Token<'source> {
         Token {
             token_type: TokenType::Error,
             lexeme: message,
@@ -211,6 +214,7 @@ impl<'source> Scanner<'source> {
     }
 }
 
+// Tokens are pretty small, so we'll pass them around by value
 #[derive(Clone, Copy)]
 pub struct Token<'source> {
     pub token_type: TokenType,
@@ -218,7 +222,8 @@ pub struct Token<'source> {
     pub line: u32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, IntoPrimitive, EnumIter, EnumCount)]
+#[repr(u8)]
 pub enum TokenType {
     LeftParen,
     RightParen,
