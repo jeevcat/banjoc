@@ -49,13 +49,13 @@ impl Vm {
             let instruction = self.read_byte();
             if let Ok(instruction) = instruction.try_into() {
                 match instruction {
-                    OpCode::Add => self.binary_op(|a, b| a + b)?,
+                    OpCode::Add => self.binary_op(|a, b| Value::Number(a + b))?,
                     OpCode::Constant => {
                         let constant = self.read_constant();
                         self.stack.push(constant);
                     }
-                    OpCode::Divide => self.binary_op(|a, b| a / b)?,
-                    OpCode::Multiply => self.binary_op(|a, b| a * b)?,
+                    OpCode::Divide => self.binary_op(|a, b| Value::Number(a / b))?,
+                    OpCode::Multiply => self.binary_op(|a, b| Value::Number(a * b))?,
                     OpCode::Negate => {
                         if let Value::Number(value) = self.stack.peek(0) {
                             self.stack.pop();
@@ -68,7 +68,7 @@ impl Vm {
                         println!("{}", self.stack.pop());
                         return Ok(());
                     }
-                    OpCode::Subtract => self.binary_op(|a, b| a - b)?,
+                    OpCode::Subtract => self.binary_op(|a, b| Value::Number(a - b))?,
                     OpCode::Nil => self.stack.push(Value::Nil),
                     OpCode::True => self.stack.push(Value::Bool(true)),
                     OpCode::False => self.stack.push(Value::Bool(false)),
@@ -76,18 +76,27 @@ impl Vm {
                         let value = self.stack.pop();
                         self.stack.push(Value::Bool(value.is_falsey()));
                     }
+                    OpCode::Equal => {
+                        let a = self.stack.pop();
+                        let b = self.stack.pop();
+                        self.stack.push(Value::Bool(a == b))
+                    }
+                    OpCode::Greater => self.binary_op(|a, b| Value::Bool(a > b))?,
+                    OpCode::Less => self.binary_op(|a, b| Value::Bool(a < b))?,
                 }
             }
         }
     }
 
-    fn binary_op(&mut self, f: impl Fn(f64, f64) -> f64) -> Result<()> {
+    fn binary_op(&mut self, f: impl Fn(f64, f64) -> Value) -> Result<()> {
         let b = self.stack.peek(0);
         let a = self.stack.peek(1);
         match (a, b) {
             (Value::Number(a), Value::Number(b)) => {
+                self.stack.pop();
+                self.stack.pop();
                 let result = f(a, b);
-                self.stack.push(Value::Number(result));
+                self.stack.push(result);
                 Ok(())
             }
             _ => self.runtime_error("Operands must be numbers."),

@@ -8,6 +8,7 @@ pub enum OpCode {
 
     Not,
     Negate,
+
     Add,
     Subtract,
     Multiply,
@@ -19,4 +20,9 @@ pub enum OpCode {
     Nil,
     True,
     False,
+
+    // Comparison
+    Equal,
+    Greater,
+    Less,
 }

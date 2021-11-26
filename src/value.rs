@@ -26,3 +26,14 @@ impl Display for Value {
         }
     }
 }
+
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Value::Bool(a), Value::Bool(b)) => a == b,
+            (Value::Number(a), Value::Number(b)) => a == b,
+            (Value::Nil, Value::Nil) => true,
+            _ => false,
+        }
+    }
+}

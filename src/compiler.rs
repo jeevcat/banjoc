@@ -112,6 +112,21 @@ impl<'source> Parser<'source> {
             TokenType::Minus => self.emit_opcode(OpCode::Subtract),
             TokenType::Star => self.emit_opcode(OpCode::Multiply),
             TokenType::Slash => self.emit_opcode(OpCode::Divide),
+            TokenType::EqualEqual => self.emit_opcode(OpCode::Equal),
+            TokenType::Greater => self.emit_opcode(OpCode::Greater),
+            TokenType::Less => self.emit_opcode(OpCode::Less),
+            TokenType::BangEqual => {
+                self.emit_opcode(OpCode::Equal);
+                self.emit_opcode(OpCode::Not);
+            }
+            TokenType::GreaterEqual => {
+                self.emit_opcode(OpCode::Less);
+                self.emit_opcode(OpCode::Not);
+            }
+            TokenType::LessEqual => {
+                self.emit_opcode(OpCode::Greater);
+                self.emit_opcode(OpCode::Not);
+            }
             _ => unreachable!(),
         }
     }
@@ -306,13 +321,13 @@ impl<'source> ParseRuleTable<'source> {
             Slash =>        ParseRule::new(None,                   Some(Parser::binary), P::Factor),
             Star =>         ParseRule::new(None,                   Some(Parser::binary), P::Factor),
             Bang =>         ParseRule::new(Some(Parser::unary),    None,                 P::None),
-            BangEqual =>    ParseRule::new(None,                   None,                 P::None),
+            BangEqual =>    ParseRule::new(None,                   Some(Parser::binary), P::Equality),
             Equal =>        ParseRule::new(None,                   None,                 P::None),
-            EqualEqual =>   ParseRule::new(None,                   None,                 P::None),
-            Greater =>      ParseRule::new(None,                   None,                 P::None),
-            GreaterEqual => ParseRule::new(None,                   None,                 P::None),
-            Less =>         ParseRule::new(None,                   None,                 P::None),
-            LessEqual =>    ParseRule::new(None,                   None,                 P::None),
+            EqualEqual =>   ParseRule::new(None,                   Some(Parser::binary), P::Equality),
+            Greater =>      ParseRule::new(None,                   Some(Parser::binary), P::Comparison),
+            GreaterEqual => ParseRule::new(None,                   Some(Parser::binary), P::Comparison),
+            Less =>         ParseRule::new(None,                   Some(Parser::binary), P::Comparison),
+            LessEqual =>    ParseRule::new(None,                   Some(Parser::binary), P::Comparison),
             Identifier =>   ParseRule::new(None,                   None,                 P::None),
             String =>       ParseRule::new(None,                   None,                 P::None),
             Number =>       ParseRule::new(Some(Parser::number),   None,                 P::None),
