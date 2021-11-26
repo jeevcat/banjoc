@@ -114,6 +114,7 @@ impl<'source> Scanner<'source> {
         }
 
         // The closing quote
+        self.advance();
         self.make_token(TokenType::String)
     }
 

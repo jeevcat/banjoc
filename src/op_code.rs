@@ -11,4 +11,9 @@ pub enum OpCode {
     Multiply,
     Divide,
     Return,
+
+    // Literals stored directly as instructions
+    Nil,
+    True,
+    False,
 }

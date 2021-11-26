@@ -76,7 +76,7 @@ impl<'source> Parser<'source> {
 
     fn number(&mut self) {
         let value: f64 = self.previous.lexeme.parse().unwrap();
-        self.emit_constant(value)
+        self.emit_constant(Value::Number(value))
     }
 
     fn grouping(&mut self) {
@@ -111,6 +111,14 @@ impl<'source> Parser<'source> {
             TokenType::Minus => self.emit_opcode(OpCode::Subtract),
             TokenType::Star => self.emit_opcode(OpCode::Multiply),
             TokenType::Slash => self.emit_opcode(OpCode::Divide),
+            _ => unreachable!(),
+        }
+    }
+    fn literal(&mut self) {
+        match self.previous.token_type {
+            TokenType::False => self.emit_opcode(OpCode::False),
+            TokenType::Nil => self.emit_opcode(OpCode::Nil),
+            TokenType::True => self.emit_opcode(OpCode::True),
             _ => unreachable!(),
         }
     }
@@ -310,17 +318,17 @@ impl<'source> ParseRuleTable<'source> {
             And =>          ParseRule::new(None,                   None,                 P::None),
             Class =>        ParseRule::new(None,                   None,                 P::None),
             Else =>         ParseRule::new(None,                   None,                 P::None),
-            False =>        ParseRule::new(None,                   None,                 P::None),
+            False =>        ParseRule::new(Some(Parser::literal),  None,                 P::None),
             For =>          ParseRule::new(None,                   None,                 P::None),
             Fun =>          ParseRule::new(None,                   None,                 P::None),
             If =>           ParseRule::new(None,                   None,                 P::None),
-            Nil =>          ParseRule::new(None,                   None,                 P::None),
+            Nil =>          ParseRule::new(Some(Parser::literal),  None,                 P::None),
             Or =>           ParseRule::new(None,                   None,                 P::None),
             Print =>        ParseRule::new(None,                   None,                 P::None),
             Return =>       ParseRule::new(None,                   None,                 P::None),
             Super =>        ParseRule::new(None,                   None,                 P::None),
             This =>         ParseRule::new(None,                   None,                 P::None),
-            True =>         ParseRule::new(None,                   None,                 P::None),
+            True =>         ParseRule::new(Some(Parser::literal),  None,                 P::None),
             Var =>          ParseRule::new(None,                   None,                 P::None),
             While =>        ParseRule::new(None,                   None,                 P::None),
             Error =>        ParseRule::new(None,                   None,                 P::None),

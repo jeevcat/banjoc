@@ -34,6 +34,7 @@ impl Vm {
         self.run()
     }
 
+    // Returning an error from this function (including ?) halts execution
     fn run(&mut self) -> Result<()> {
         loop {
             #[cfg(feature = "debug_trace_execution")]
@@ -48,32 +49,45 @@ impl Vm {
             let instruction = self.read_byte();
             if let Ok(instruction) = instruction.try_into() {
                 match instruction {
-                    OpCode::Add => self.binary_op(|a, b| a + b),
+                    OpCode::Add => self.binary_op(|a, b| a + b)?,
                     OpCode::Constant => {
                         let constant = self.read_constant();
                         self.stack.push(constant);
                     }
-                    OpCode::Divide => self.binary_op(|a, b| a / b),
-                    OpCode::Multiply => self.binary_op(|a, b| a * b),
+                    OpCode::Divide => self.binary_op(|a, b| a / b)?,
+                    OpCode::Multiply => self.binary_op(|a, b| a * b)?,
                     OpCode::Negate => {
-                        let value = -self.stack.pop();
-                        self.stack.push(value);
+                        if let Value::Number(value) = self.stack.peek(0) {
+                            self.stack.pop();
+                            self.stack.push(Value::Number(-value));
+                        } else {
+                            return self.runtime_error("Operand must be a number.");
+                        }
                     }
                     OpCode::Return => {
                         println!("{}", self.stack.pop());
                         return Ok(());
                     }
-                    OpCode::Subtract => self.binary_op(|a, b| a - b),
+                    OpCode::Subtract => self.binary_op(|a, b| a - b)?,
+                    OpCode::Nil => self.stack.push(Value::Nil),
+                    OpCode::True => self.stack.push(Value::Bool(true)),
+                    OpCode::False => self.stack.push(Value::Bool(false)),
                 }
             }
         }
     }
 
-    fn binary_op(&mut self, f: impl Fn(f64, f64) -> f64) {
-        let b = self.stack.pop();
-        let a = self.stack.pop();
-        let result = f(a, b);
-        self.stack.push(result);
+    fn binary_op(&mut self, f: impl Fn(f64, f64) -> f64) -> Result<()> {
+        let b = self.stack.peek(0);
+        let a = self.stack.peek(1);
+        match (a, b) {
+            (Value::Number(a), Value::Number(b)) => {
+                let result = f(a, b);
+                self.stack.push(Value::Number(result));
+                Ok(())
+            }
+            _ => self.runtime_error("Operands must be numbers."),
+        }
     }
 
     fn read_byte(&mut self) -> u8 {
@@ -86,5 +100,14 @@ impl Vm {
         let index: usize = self.read_byte().try_into().unwrap();
         // Only called when we know chunk is Some
         self.chunk.as_ref().unwrap().constants[index]
+    }
+
+    fn runtime_error(&self, message: &str) -> Result<()> {
+        let chunk = self.chunk.as_ref().unwrap();
+        let instruction = unsafe { self.ip.offset_from(chunk.code.as_ptr()) - 1 } as usize;
+        let line = chunk.lines[instruction];
+        eprintln!("{}", message);
+        eprintln!("[line {}] in script", line);
+        Err(LoxError::RuntimeError)
     }
 }

@@ -1,5 +1,7 @@
-use std::fmt::{Debug, Write};
-use std::ptr::null_mut;
+use std::{
+    fmt::{Debug, Write},
+    ptr::null_mut,
+};
 
 use crate::value::Value;
 
@@ -13,7 +15,7 @@ impl Stack {
     const STACK_SIZE: usize = 256;
     pub fn new() -> Stack {
         Stack {
-            data: [0.; Stack::STACK_SIZE],
+            data: [Value::Nil; Stack::STACK_SIZE],
             top: null_mut(),
         }
     }
@@ -34,6 +36,10 @@ impl Stack {
             self.top = self.top.offset(-1);
             *self.top
         }
+    }
+
+    pub fn peek(&self, distance: isize) -> Value {
+        unsafe { *self.top.offset(-1 - distance) }
     }
 }
 
