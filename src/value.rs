@@ -1,4 +1,4 @@
-use std::{fmt::Display, ops::Deref, ptr::NonNull};
+use std::fmt::Display;
 
 use crate::{gc::GcRef, obj::Obj};
 

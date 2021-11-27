@@ -1,7 +1,4 @@
-use std::{
-    fmt::{Display, Pointer},
-    ptr::NonNull,
-};
+use std::fmt::Display;
 
 use crate::gc::GcRef;
 

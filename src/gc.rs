@@ -1,10 +1,9 @@
 use std::{
-    mem,
     ops::{Deref, DerefMut},
     ptr::NonNull,
 };
 
-use crate::obj::{LoxString, Obj, ObjHeader};
+use crate::obj::{LoxString, Obj};
 
 // Basically a NonNull but allows derefing
 pub struct GcRef<T> {
