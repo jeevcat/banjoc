@@ -204,34 +204,75 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_name() {
+    fn insertion() {
+        let range = 0..1000;
         // Generate some strings
-        let mut strings: Vec<_> = (b'a'..=b'z')
-            .map(|c| LoxString::new((c as char).to_string()))
-            .collect();
+        let mut strings: Vec<_> = range.map(|n| LoxString::new(n.to_string())).collect();
 
         // Simulate being held by gc
-        let refs: Vec<GcRef<LoxString>> = strings
-            .iter_mut()
-            .map(|ls| GcRef {
-                pointer: unsafe { NonNull::new_unchecked(ls as *mut _) },
-            })
-            .collect();
+        let refs = make_refs(&mut strings);
 
         // Insert into Table
         let mut t = Table::new();
         for key in &refs {
-            let num = key.string.as_bytes()[0] as f64;
+            let num = str_to_num(*key) as f64;
             t.insert(*key, Value::Number(num));
         }
 
         // Check inserted values
         for key in refs {
-            if let Some(Value::Number(num)) = t.get(key) {
-                assert_eq!(key.string.as_bytes()[0], num as u8);
-            } else {
-                unreachable!()
-            }
+            let num = to_num(t.get(key).unwrap());
+            assert_eq!(str_to_num(key), num);
         }
+    }
+
+    #[test]
+    fn deletion() {
+        // Generate some strings
+        let mut strings: Vec<_> = (0..1000).map(|n| LoxString::new(n.to_string())).collect();
+
+        // Simulate being held by gc
+        let mut refs = make_refs(&mut strings);
+
+        // Insert into Table
+        let mut t = Table::new();
+        for key in &refs {
+            let num = str_to_num(*key) as f64;
+            t.insert(*key, Value::Number(num));
+        }
+
+        for i in 0..250 {
+            let index = i * 3;
+            t.remove(refs[index]);
+            refs.remove(index);
+            dbg!(index);
+        }
+
+        // Check inserted values
+        for key in refs {
+            let num = to_num(t.get(key).unwrap());
+            assert_eq!(str_to_num(key), num);
+        }
+    }
+
+    fn make_refs(strings: &mut [LoxString]) -> Vec<GcRef<LoxString>> {
+        strings
+            .iter_mut()
+            .map(|ls| GcRef {
+                pointer: unsafe { NonNull::new_unchecked(ls as *mut _) },
+            })
+            .collect()
+    }
+
+    fn to_num(value: Value) -> i32 {
+        if let Value::Number(num) = value {
+            num as i32
+        } else {
+            unreachable!()
+        }
+    }
+
+    fn str_to_num(string: GcRef<LoxString>) -> i32 {
+        string.string.parse().unwrap()
     }
 }
