@@ -1,10 +1,14 @@
-use std::fmt::Display;
+use std::{fmt::Display, ops::Deref, ptr::NonNull};
+
+use crate::{gc::GcRef, obj::Obj};
 
 #[derive(Clone, Copy)]
 pub enum Value {
     Bool(bool),
     Nil,
     Number(f64),
+    // Pointer to a garbage collected object. Value is NOT deep copied.
+    Obj(GcRef<Obj>),
 }
 
 impl Value {
@@ -12,7 +16,7 @@ impl Value {
         match self {
             Value::Bool(b) => !b,
             Value::Nil => true,
-            Value::Number(_) => false,
+            _ => false,
         }
     }
 }
@@ -23,6 +27,7 @@ impl Display for Value {
             Value::Bool(x) => x.fmt(f),
             Value::Nil => f.write_str("nil"),
             Value::Number(x) => x.fmt(f),
+            Value::Obj(x) => x.fmt(f),
         }
     }
 }

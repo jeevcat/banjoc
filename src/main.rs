@@ -12,6 +12,8 @@ mod chunk;
 mod compiler;
 mod disassembler;
 mod error;
+mod gc;
+mod obj;
 mod op_code;
 mod scanner;
 mod stack;

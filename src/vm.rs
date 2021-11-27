@@ -1,8 +1,10 @@
-use std::ptr::null;
+use std::{ops::Deref, ptr::null};
 
 use crate::{
     compiler,
     error::{LoxError, Result},
+    gc::Gc,
+    obj::Obj,
     stack::Stack,
 };
 
@@ -12,6 +14,7 @@ pub struct Vm {
     chunk: Option<Chunk>,
     ip: *const u8,
     stack: Stack,
+    gc: Gc,
 }
 
 impl Vm {
@@ -20,13 +23,14 @@ impl Vm {
             ip: null(),
             chunk: None,
             stack: Stack::new(),
+            gc: Gc::new(),
         };
         vm.stack.initialize();
         vm
     }
 
     pub fn interpret(&mut self, source: &str) -> Result<()> {
-        let chunk = compiler::compile(source)?;
+        let chunk = compiler::compile(source, &mut self.gc)?;
 
         self.ip = chunk.code.as_ptr();
         self.chunk = Some(chunk);
@@ -49,7 +53,31 @@ impl Vm {
             let instruction = self.read_byte();
             if let Ok(instruction) = instruction.try_into() {
                 match instruction {
-                    OpCode::Add => self.binary_op(|a, b| Value::Number(a + b))?,
+                    OpCode::Add => {
+                        let b = self.stack.peek(0);
+                        let a = self.stack.peek(1);
+                        match (a, b) {
+                            (Value::Number(a), Value::Number(b)) => {
+                                self.stack.pop();
+                                self.stack.pop();
+                                let result = Value::Number(a + b);
+                                self.stack.push(result);
+                            }
+                            (Value::Obj(a), Value::Obj(b)) => match (a.deref(), b.deref()) {
+                                (Obj::String(a), Obj::String(b)) => {
+                                    self.stack.pop();
+                                    self.stack.pop();
+                                    let result =
+                                        self.gc.alloc(format!("{}{}", &a.string, &b.string));
+                                    self.stack.push(Value::Obj(result));
+                                }
+                            },
+                            _ => {
+                                return self
+                                    .runtime_error("Operands must be two numbers or two strings.")
+                            }
+                        }
+                    }
                     OpCode::Constant => {
                         let constant = self.read_constant();
                         self.stack.push(constant);

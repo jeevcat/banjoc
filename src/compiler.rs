@@ -5,14 +5,15 @@ use strum::{EnumCount, IntoEnumIterator};
 use crate::{
     chunk::Chunk,
     error::{LoxError, Result},
+    gc::Gc,
     op_code::OpCode,
     scanner::{Scanner, Token, TokenType},
     value::Value,
 };
 
-pub fn compile(source: &str) -> Result<Chunk> {
+pub fn compile(source: &str, gc: &mut Gc) -> Result<Chunk> {
     let scanner = Scanner::new(source);
-    let mut parser = Parser::new(scanner);
+    let mut parser = Parser::new(scanner, gc);
     parser.advance();
     parser.expression();
     parser.consume(TokenType::Eof, "Expect end of expression.");
@@ -28,13 +29,14 @@ struct Parser<'source> {
     current: Token<'source>,
     previous: Token<'source>,
     current_chunk: Chunk,
-    rules: ParseRuleTable<'source>,
+    gc: &'source mut Gc,
     had_error: bool,
     panic_mode: bool,
+    rules: ParseRuleTable<'source>,
 }
 
 impl<'source> Parser<'source> {
-    fn new(scanner: Scanner) -> Parser {
+    fn new(scanner: Scanner<'source>, gc: &'source mut Gc) -> Parser<'source> {
         let rules = ParseRuleTable::new();
 
         Parser {
@@ -42,6 +44,7 @@ impl<'source> Parser<'source> {
             current: Token::none(),
             previous: Token::none(),
             current_chunk: Chunk::new(),
+            gc,
             had_error: false,
             panic_mode: false,
             rules,
@@ -130,6 +133,7 @@ impl<'source> Parser<'source> {
             _ => unreachable!(),
         }
     }
+
     fn literal(&mut self) {
         match self.previous.token_type {
             TokenType::False => self.emit_opcode(OpCode::False),
@@ -137,6 +141,12 @@ impl<'source> Parser<'source> {
             TokenType::True => self.emit_opcode(OpCode::True),
             _ => unreachable!(),
         }
+    }
+
+    fn string(&mut self) {
+        let string = self.previous.lexeme[1..self.previous.lexeme.len() - 1].to_string();
+        let value = Value::Obj(self.gc.alloc(string));
+        self.emit_constant(value);
     }
 
     /// Starts at the current token and parses any expression at the given precedence or higher
@@ -329,7 +339,7 @@ impl<'source> ParseRuleTable<'source> {
             Less =>         ParseRule::new(None,                   Some(Parser::binary), P::Comparison),
             LessEqual =>    ParseRule::new(None,                   Some(Parser::binary), P::Comparison),
             Identifier =>   ParseRule::new(None,                   None,                 P::None),
-            String =>       ParseRule::new(None,                   None,                 P::None),
+            String =>       ParseRule::new(Some(Parser::string),   None,                 P::None),
             Number =>       ParseRule::new(Some(Parser::number),   None,                 P::None),
             And =>          ParseRule::new(None,                   None,                 P::None),
             Class =>        ParseRule::new(None,                   None,                 P::None),
