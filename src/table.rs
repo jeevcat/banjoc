@@ -97,8 +97,6 @@ impl Table {
     }
 
     fn grow(&mut self) {
-        // #TODO Vec will likely always allocate more than we need. Could control this ourselves
-
         // Double the capacity
         let new_capacity = max(8, self.capacity() * 2);
         let mut new: Vec<_> = iter::repeat_with(|| Entry {
@@ -201,33 +199,33 @@ fn find_entry_mut(entries: &mut [Entry], key: GcRef<LoxString>) -> &mut Entry {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        ops::{Deref, DerefMut},
-        ptr::NonNull,
-    };
+    use std::ptr::NonNull;
 
     use super::*;
 
     #[test]
     fn test_name() {
+        // Generate some strings
         let mut strings: Vec<_> = (b'a'..=b'z')
             .map(|c| LoxString::new((c as char).to_string()))
             .collect();
+
+        // Simulate being held by gc
         let refs: Vec<GcRef<LoxString>> = strings
             .iter_mut()
-            .map(|ls| unsafe {
-                GcRef {
-                    pointer: NonNull::new_unchecked(ls as *mut _),
-                }
+            .map(|ls| GcRef {
+                pointer: unsafe { NonNull::new_unchecked(ls as *mut _) },
             })
             .collect();
 
+        // Insert into Table
         let mut t = Table::new();
         for key in &refs {
             let num = key.string.as_bytes()[0] as f64;
             t.insert(*key, Value::Number(num));
         }
 
+        // Check inserted values
         for key in refs {
             if let Some(Value::Number(num)) = t.get(key) {
                 assert_eq!(key.string.as_bytes()[0], num as u8);
