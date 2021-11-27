@@ -3,11 +3,16 @@ use std::{
     ptr::NonNull,
 };
 
-use crate::obj::{LoxString, Obj};
+use crate::{
+    obj::{hash_string, LoxString, Obj},
+    table::Table,
+    value::Value,
+};
 
 // Basically a NonNull but allows derefing
+// Should be passed around by value
 pub struct GcRef<T> {
-    pointer: NonNull<T>,
+    pub pointer: NonNull<T>,
 }
 
 impl<T> Deref for GcRef<T> {
@@ -32,30 +37,53 @@ impl<T> Clone for GcRef<T> {
     }
 }
 
+impl<T> PartialEq for GcRef<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.pointer == other.pointer
+    }
+}
+
 pub struct Gc {
-    first: Option<GcRef<Obj>>,
+    first: Option<Obj>,
+    strings: Table,
 }
 
 impl Gc {
     pub fn new() -> Self {
-        Self { first: None }
+        Self {
+            first: None,
+            strings: Table::new(),
+        }
     }
 
-    pub fn alloc(&mut self, string: String) -> GcRef<Obj> {
+    pub fn intern(&mut self, string: String) -> GcRef<LoxString> {
+        let hash = hash_string(&string);
+
+        if let Some(interned) = self.strings.find_string(&string, hash) {
+            interned
+        } else {
+            let ls = self.alloc(string);
+            self.strings.insert(ls, Value::Nil);
+            ls
+        }
+    }
+
+    pub fn alloc(&mut self, string: String) -> GcRef<LoxString> {
         // Allocate a new LoxString Obj on the heap
         let ls = LoxString::new(string);
-        let obj = Obj::String(ls);
-        let mut boxed = Box::new(obj);
+        let mut boxed = Box::new(ls);
 
         // Adjust linked list pointers
-        boxed.header().next = self.first.take();
-        // into_raw here prevents the object from be dropped at the end of this scope. Now we are responsible!
+        boxed.header.next = self.first.take();
         let pointer = unsafe {
             GcRef {
-                pointer: NonNull::new_unchecked(Box::into_raw(boxed)),
+                pointer: NonNull::new_unchecked(
+                    // into_raw here prevents the object from be dropped at the end of this scope. Now we are responsible!
+                    Box::into_raw(boxed),
+                ),
             }
         };
-        self.first = Some(pointer);
+        self.first = Some(Obj::String(pointer));
 
         pointer
     }
@@ -65,9 +93,11 @@ impl Drop for Gc {
     fn drop(&mut self) {
         let mut obj = self.first.take();
         while let Some(mut inner) = obj {
-            println!("Dropping: {}", inner.deref());
+            println!("Dropping: {}", inner);
             let next = inner.header().next;
-            unsafe { std::ptr::drop_in_place(inner.pointer.as_ptr()) };
+            match inner {
+                Obj::String(s) => unsafe { std::ptr::drop_in_place(s.pointer.as_ptr()) },
+            }
             obj = next;
         }
     }

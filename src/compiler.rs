@@ -145,7 +145,7 @@ impl<'source> Parser<'source> {
 
     fn string(&mut self) {
         let string = self.previous.lexeme[1..self.previous.lexeme.len() - 1].to_string();
-        let value = Value::Obj(self.gc.alloc(string));
+        let value = Value::String(self.gc.intern(string));
         self.emit_constant(value);
     }
 

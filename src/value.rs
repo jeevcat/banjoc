@@ -1,14 +1,14 @@
 use std::fmt::Display;
 
-use crate::{gc::GcRef, obj::Obj};
+use crate::{gc::GcRef, obj::LoxString};
 
 #[derive(Clone, Copy)]
 pub enum Value {
     Bool(bool),
     Nil,
     Number(f64),
-    // Pointer to a garbage collected object. Value is NOT deep copied.
-    Obj(GcRef<Obj>),
+    // Following are pointers to garbage collected objects. Value is NOT deep copied.
+    String(GcRef<LoxString>),
 }
 
 impl Value {
@@ -27,7 +27,7 @@ impl Display for Value {
             Value::Bool(x) => x.fmt(f),
             Value::Nil => f.write_str("nil"),
             Value::Number(x) => x.fmt(f),
-            Value::Obj(x) => x.fmt(f),
+            Value::String(x) => x.fmt(f),
         }
     }
 }
@@ -38,6 +38,7 @@ impl PartialEq for Value {
             (Value::Bool(a), Value::Bool(b)) => a == b,
             (Value::Number(a), Value::Number(b)) => a == b,
             (Value::Nil, Value::Nil) => true,
+            (Value::String(a), Value::String(b)) => a == b,
             _ => false,
         }
     }

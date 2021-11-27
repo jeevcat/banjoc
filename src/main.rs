@@ -17,6 +17,7 @@ mod obj;
 mod op_code;
 mod scanner;
 mod stack;
+mod table;
 mod value;
 mod vm;
 

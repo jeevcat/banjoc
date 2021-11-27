@@ -1,10 +1,9 @@
-use std::{ops::Deref, ptr::null};
+use std::ptr::null;
 
 use crate::{
     compiler,
     error::{LoxError, Result},
     gc::Gc,
-    obj::Obj,
     stack::Stack,
 };
 
@@ -63,15 +62,12 @@ impl Vm {
                                 let result = Value::Number(a + b);
                                 self.stack.push(result);
                             }
-                            (Value::Obj(a), Value::Obj(b)) => match (a.deref(), b.deref()) {
-                                (Obj::String(a), Obj::String(b)) => {
-                                    self.stack.pop();
-                                    self.stack.pop();
-                                    let result =
-                                        self.gc.alloc(format!("{}{}", &a.string, &b.string));
-                                    self.stack.push(Value::Obj(result));
-                                }
-                            },
+                            (Value::String(a), Value::String(b)) => {
+                                self.stack.pop();
+                                self.stack.pop();
+                                let result = self.gc.alloc(format!("{}{}", &a.string, &b.string));
+                                self.stack.push(Value::String(result));
+                            }
                             _ => {
                                 return self
                                     .runtime_error("Operands must be two numbers or two strings.")
