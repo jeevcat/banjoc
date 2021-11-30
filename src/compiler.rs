@@ -92,8 +92,28 @@ impl<'source> Parser<'source> {
         self.parse_precedence(Precedence::Assignment)
     }
 
+    fn var_declaration(&mut self) {
+        let global = self.parse_variable("Expect variable name.");
+
+        if self.advance_matching(TokenType::Equal) {
+            self.expression();
+        } else {
+            self.emit_opcode(OpCode::Nil);
+        }
+        self.consume(
+            TokenType::Semicolon,
+            "Expect ';' after variable declaration",
+        );
+
+        self.define_variable(global);
+    }
+
     fn declaration(&mut self) {
-        self.statement();
+        if self.advance_matching(TokenType::Var) {
+            self.var_declaration();
+        } else {
+            self.statement();
+        }
 
         if self.panic_mode {
             self.synchronize();
@@ -218,6 +238,15 @@ impl<'source> Parser<'source> {
         self.emit_constant(value);
     }
 
+    fn variable(&mut self) {
+        self.named_variable(self.previous)
+    }
+
+    fn named_variable(&mut self, token: Token) {
+        let arg = self.identifier_constant(token);
+        self.emit_instruction(OpCode::GetGlobal, arg)
+    }
+
     /// Starts at the current token and parses any expression at the given precedence or higher
     fn parse_precedence(&mut self, precedence: Precedence) {
         self.advance();
@@ -236,6 +265,20 @@ impl<'source> Parser<'source> {
             let infix_rule = self.get_rule(self.previous.token_type).infix.unwrap();
             infix_rule(self);
         }
+    }
+
+    fn parse_variable(&mut self, error_message: &str) -> u8 {
+        self.consume(TokenType::Identifier, error_message);
+        self.identifier_constant(self.previous)
+    }
+
+    fn define_variable(&mut self, global: u8) {
+        self.emit_instruction(OpCode::DefineGlobal, global)
+    }
+
+    fn identifier_constant(&mut self, token: Token) -> u8 {
+        let value = Value::String(self.gc.intern(token.lexeme.to_string()));
+        self.make_constant(value)
     }
 
     fn get_rule(&self, token_type: TokenType) -> &ParseRule<'source> {
@@ -407,7 +450,7 @@ impl<'source> ParseRuleTable<'source> {
             GreaterEqual => ParseRule::new(None,                   Some(Parser::binary), P::Comparison),
             Less =>         ParseRule::new(None,                   Some(Parser::binary), P::Comparison),
             LessEqual =>    ParseRule::new(None,                   Some(Parser::binary), P::Comparison),
-            Identifier =>   ParseRule::new(None,                   None,                 P::None),
+            Identifier =>   ParseRule::new(Some(Parser::variable), None,                 P::None),
             String =>       ParseRule::new(Some(Parser::string),   None,                 P::None),
             Number =>       ParseRule::new(Some(Parser::number),   None,                 P::None),
             And =>          ParseRule::new(None,                   None,                 P::None),

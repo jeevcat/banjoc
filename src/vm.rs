@@ -5,6 +5,7 @@ use crate::{
     error::{LoxError, Result},
     gc::Gc,
     stack::Stack,
+    table::Table,
 };
 
 use crate::{chunk::Chunk, op_code::OpCode, value::Value};
@@ -13,6 +14,7 @@ pub struct Vm {
     chunk: Option<Chunk>,
     ip: *const u8,
     stack: Stack,
+    globals: Table,
     gc: Gc,
 }
 
@@ -22,6 +24,7 @@ impl Vm {
             ip: null(),
             chunk: None,
             stack: Stack::new(),
+            globals: Table::new(),
             gc: Gc::new(),
         };
         vm.stack.initialize();
@@ -110,6 +113,34 @@ impl Vm {
                     OpCode::Print => println!("{}", self.stack.pop()),
                     OpCode::Pop => {
                         self.stack.pop();
+                    }
+                    OpCode::DefineGlobal => {
+                        let value = self.read_constant();
+                        match value {
+                            Value::String(name) => {
+                                self.globals.insert(name, self.stack.peek(0));
+                                self.stack.pop();
+                            }
+                            // The compiler never emits and instruct that refers to a non-string constant
+                            _ => unreachable!(),
+                        }
+                    }
+                    OpCode::GetGlobal => {
+                        let value = self.read_constant();
+                        match value {
+                            Value::String(name) => {
+                                if let Some(value) = self.globals.get(name) {
+                                    self.stack.push(value);
+                                } else {
+                                    return self.runtime_error(&format!(
+                                        "Undefined variable '{}'.",
+                                        name.string
+                                    ));
+                                }
+                            }
+                            // The compiler never emits and instruct that refers to a non-string constant
+                            _ => unreachable!(),
+                        }
                     }
                 }
             }
