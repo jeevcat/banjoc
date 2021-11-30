@@ -142,6 +142,22 @@ impl Vm {
                             _ => unreachable!(),
                         }
                     }
+                    OpCode::SetGlobal => {
+                        let value = self.read_constant();
+                        match value {
+                            Value::String(name) => {
+                                if self.globals.insert(name, self.stack.peek(0)) {
+                                    self.globals.remove(name);
+                                    return self.runtime_error(&format!(
+                                        "Undefined variable '{}'.",
+                                        name.string
+                                    ));
+                                }
+                            }
+                            // The compiler never emits and instruct that refers to a non-string constant
+                            _ => unreachable!(),
+                        }
+                    }
                 }
             }
         }

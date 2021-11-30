@@ -166,17 +166,17 @@ impl<'source> Parser<'source> {
         }
     }
 
-    fn number(&mut self) {
+    fn number(&mut self, _can_assign: bool) {
         let value: f64 = self.previous.lexeme.parse().unwrap();
         self.emit_constant(Value::Number(value))
     }
 
-    fn grouping(&mut self) {
+    fn grouping(&mut self, _can_assign: bool) {
         self.expression();
         self.consume(TokenType::RightParen, "Expect ')' after expression.");
     }
 
-    fn unary(&mut self) {
+    fn unary(&mut self, _can_assign: bool) {
         let operator_type = self.previous.token_type;
 
         // Compile the operand
@@ -190,7 +190,7 @@ impl<'source> Parser<'source> {
         }
     }
 
-    fn binary(&mut self) {
+    fn binary(&mut self, _can_assign: bool) {
         // By the time we get here we've already compiled the left operand
         let operator_type = self.previous.token_type;
 
@@ -223,7 +223,7 @@ impl<'source> Parser<'source> {
         }
     }
 
-    fn literal(&mut self) {
+    fn literal(&mut self, _can_assign: bool) {
         match self.previous.token_type {
             TokenType::False => self.emit_opcode(OpCode::False),
             TokenType::Nil => self.emit_opcode(OpCode::Nil),
@@ -232,38 +232,49 @@ impl<'source> Parser<'source> {
         }
     }
 
-    fn string(&mut self) {
+    fn string(&mut self, _can_assign: bool) {
         let string = self.previous.lexeme[1..self.previous.lexeme.len() - 1].to_string();
         let value = Value::String(self.gc.intern(string));
         self.emit_constant(value);
     }
 
-    fn variable(&mut self) {
-        self.named_variable(self.previous)
+    fn variable(&mut self, can_assign: bool) {
+        self.named_variable(self.previous, can_assign)
     }
 
-    fn named_variable(&mut self, token: Token) {
+    fn named_variable(&mut self, token: Token, can_assign: bool) {
         let arg = self.identifier_constant(token);
-        self.emit_instruction(OpCode::GetGlobal, arg)
+
+        if can_assign && self.advance_matching(TokenType::Equal) {
+            self.expression();
+            self.emit_instruction(OpCode::SetGlobal, arg);
+        } else {
+            self.emit_instruction(OpCode::GetGlobal, arg);
+        }
     }
 
     /// Starts at the current token and parses any expression at the given precedence or higher
     fn parse_precedence(&mut self, precedence: Precedence) {
         self.advance();
+        let can_assign = precedence <= Precedence::Assignment;
         let prefix_rule = self.get_rule(self.previous.token_type).prefix;
         match prefix_rule {
             None => {
                 self.error("Expect expression.");
                 return;
             }
-            Some(prefix_rule) => prefix_rule(self),
+            Some(prefix_rule) => prefix_rule(self, can_assign),
         }
 
         while precedence <= self.get_rule(self.current.token_type).precedence {
             self.advance();
             // Can unwrap as
             let infix_rule = self.get_rule(self.previous.token_type).infix.unwrap();
-            infix_rule(self);
+            infix_rule(self, can_assign);
+        }
+
+        if can_assign && self.advance_matching(TokenType::Equal) {
+            self.error("Invalid assignment target.")
         }
     }
 
@@ -385,7 +396,7 @@ impl Precedence {
     }
 }
 
-type ParseFn<'a> = fn(&mut Parser<'a>) -> ();
+type ParseFn<'a> = fn(&mut Parser<'a>, can_assign: bool) -> ();
 struct ParseRule<'source> {
     prefix: Option<ParseFn<'source>>,
     infix: Option<ParseFn<'source>>,

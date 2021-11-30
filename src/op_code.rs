@@ -28,6 +28,8 @@ pub enum OpCode {
 
     Print,
     Pop,
+
     DefineGlobal,
     GetGlobal,
+    SetGlobal,
 }

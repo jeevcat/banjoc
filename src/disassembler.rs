@@ -42,7 +42,8 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> usize {
             OpCode::Print => simple_instruction("OP_PRINT", offset),
             OpCode::Pop => simple_instruction("OP_POP", offset),
             OpCode::DefineGlobal => constant_instruction(chunk, "OP_DEFINE_GLOBAL", offset),
-            OpCode::Pop => constant_instruction(chunk, "OP_GET_GLOBAL", offset),
+            OpCode::GetGlobal => constant_instruction(chunk, "OP_GET_GLOBAL", offset),
+            OpCode::SetGlobal => constant_instruction(chunk, "OP_SET_GLOBAL", offset),
         },
         Err(_) => {
             println!("Unknown opcode {}", byte);
