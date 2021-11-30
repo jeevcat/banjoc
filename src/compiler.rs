@@ -13,11 +13,7 @@ use crate::{
 
 pub fn compile(source: &str, gc: &mut Gc) -> Result<Chunk> {
     let scanner = Scanner::new(source);
-    let mut parser = Parser::new(scanner, gc);
-    parser.advance();
-    parser.expression();
-    parser.consume(TokenType::Eof, "Expect end of expression.");
-    parser.end_compiler();
+    let parser = Parser::new(scanner, gc);
     match parser.had_error {
         true => Err(LoxError::CompileError),
         false => Ok(parser.current_chunk),
@@ -39,7 +35,7 @@ impl<'source> Parser<'source> {
     fn new(scanner: Scanner<'source>, gc: &'source mut Gc) -> Parser<'source> {
         let rules = ParseRuleTable::new();
 
-        Parser {
+        let mut parser = Parser {
             scanner,
             current: Token::none(),
             previous: Token::none(),
@@ -48,7 +44,14 @@ impl<'source> Parser<'source> {
             had_error: false,
             panic_mode: false,
             rules,
+        };
+
+        parser.advance();
+        while !parser.advance_matching(TokenType::Eof) {
+            parser.declaration();
         }
+        parser.end_compiler();
+        parser
     }
 
     fn advance(&mut self) {
@@ -73,8 +76,74 @@ impl<'source> Parser<'source> {
         self.error_at_current(message);
     }
 
+    fn advance_matching(&mut self, token_type: TokenType) -> bool {
+        if !self.check(token_type) {
+            return false;
+        }
+        self.advance();
+        true
+    }
+
+    fn check(&self, token_type: TokenType) -> bool {
+        self.current.token_type == token_type
+    }
+
     fn expression(&mut self) {
         self.parse_precedence(Precedence::Assignment)
+    }
+
+    fn declaration(&mut self) {
+        self.statement();
+
+        if self.panic_mode {
+            self.synchronize();
+        }
+    }
+
+    fn statement(&mut self) {
+        if self.advance_matching(TokenType::Print) {
+            self.print_statement();
+        } else {
+            self.expression_statement();
+        }
+    }
+
+    fn expression_statement(&mut self) {
+        self.expression();
+        self.consume(TokenType::Semicolon, "Expect ';' after expression.");
+        self.emit_opcode(OpCode::Pop)
+    }
+
+    fn print_statement(&mut self) {
+        self.expression();
+        self.consume(TokenType::Semicolon, "Expect ';' after value.");
+        self.emit_opcode(OpCode::Print);
+    }
+
+    fn synchronize(&mut self) {
+        self.panic_mode = false;
+
+        // Skip all tokens intil we reach something that looks like a statement boundary
+        while !matches!(self.current.token_type, TokenType::Eof) {
+            if matches!(self.previous.token_type, TokenType::Semicolon) {
+                return;
+            }
+            match self.current.token_type {
+                TokenType::Class
+                | TokenType::Fun
+                | TokenType::Var
+                | TokenType::For
+                | TokenType::If
+                | TokenType::While
+                | TokenType::Print
+                | TokenType::Return => return,
+                _ => {
+                    // Do nothing
+                }
+            }
+
+            self.advance();
+        }
     }
 
     fn number(&mut self) {

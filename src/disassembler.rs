@@ -39,6 +39,8 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> usize {
             OpCode::Equal => simple_instruction("OP_EQUAL", offset),
             OpCode::Greater => simple_instruction("OP_GREATER", offset),
             OpCode::Less => simple_instruction("Less", offset),
+            OpCode::Print => simple_instruction("print", offset),
+            OpCode::Pop => simple_instruction("pop", offset),
         },
         Err(_) => {
             println!("Unknown opcode {}", byte);

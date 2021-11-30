@@ -25,4 +25,7 @@ pub enum OpCode {
     Equal,
     Greater,
     Less,
+
+    Print,
+    Pop,
 }

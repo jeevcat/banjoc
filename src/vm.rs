@@ -89,7 +89,7 @@ impl Vm {
                         }
                     }
                     OpCode::Return => {
-                        println!("{}", self.stack.pop());
+                        // Exit interpreter
                         return Ok(());
                     }
                     OpCode::Subtract => self.binary_op(|a, b| Value::Number(a - b))?,
@@ -107,6 +107,10 @@ impl Vm {
                     }
                     OpCode::Greater => self.binary_op(|a, b| Value::Bool(a > b))?,
                     OpCode::Less => self.binary_op(|a, b| Value::Bool(a < b))?,
+                    OpCode::Print => println!("{}", self.stack.pop()),
+                    OpCode::Pop => {
+                        self.stack.pop();
+                    }
                 }
             }
         }

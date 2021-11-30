@@ -8,8 +8,8 @@ use error::LoxError;
 use vm::Vm;
 
 mod chunk;
-#[cfg(feature = "debug_trace_execution")]
 mod compiler;
+#[cfg(feature = "debug_trace_execution")]
 mod disassembler;
 mod error;
 mod gc;
