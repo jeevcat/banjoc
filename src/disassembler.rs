@@ -25,7 +25,7 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> usize {
     let byte = chunk.code[offset];
     match OpCode::try_from(byte) {
         Ok(instruction) => match instruction {
-            OpCode::Constant => constant_instruction(chunk, "OP_CONSTANT", offset),
+            OpCode::Constant => constant_instruction("OP_CONSTANT", chunk, offset),
             OpCode::Negate => simple_instruction("OP_NEGATE", offset),
             OpCode::Return => simple_instruction("OP_RETURN", offset),
             OpCode::Add => simple_instruction("OP_ADD", offset),
@@ -41,9 +41,11 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> usize {
             OpCode::Less => simple_instruction("OP_LESS", offset),
             OpCode::Print => simple_instruction("OP_PRINT", offset),
             OpCode::Pop => simple_instruction("OP_POP", offset),
-            OpCode::DefineGlobal => constant_instruction(chunk, "OP_DEFINE_GLOBAL", offset),
-            OpCode::GetGlobal => constant_instruction(chunk, "OP_GET_GLOBAL", offset),
-            OpCode::SetGlobal => constant_instruction(chunk, "OP_SET_GLOBAL", offset),
+            OpCode::DefineGlobal => constant_instruction("OP_DEFINE_GLOBAL", chunk, offset),
+            OpCode::GetGlobal => constant_instruction("OP_GET_GLOBAL", chunk, offset),
+            OpCode::SetGlobal => constant_instruction("OP_SET_GLOBAL", chunk, offset),
+            OpCode::GetLocal => byte_instruction("OP_GET_LOCAL", chunk, offset),
+            OpCode::SetLocal => byte_instruction("OP_SET_LOCAL", chunk, offset),
         },
         Err(_) => {
             println!("Unknown opcode {}", byte);
@@ -57,11 +59,17 @@ fn simple_instruction(name: &str, offset: usize) -> usize {
     offset + 1
 }
 
-fn constant_instruction(chunk: &Chunk, name: &str, offset: usize) -> usize {
+fn constant_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
     let constant = chunk.code[offset + 1] as usize;
     println!(
         "{:-16} {:4} '{}'",
         name, constant, chunk.constants[constant]
     );
+    offset + 2
+}
+
+fn byte_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
+    let slot = chunk.code[offset + 1] as usize;
+    println!("{:-16} {:4}", name, slot);
     offset + 2
 }

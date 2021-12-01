@@ -224,7 +224,7 @@ pub struct Token<'source> {
 }
 
 impl<'source> Token<'source> {
-    pub fn none() -> Token<'source> {
+    pub const fn none() -> Token<'source> {
         Token {
             token_type: TokenType::Error,
             lexeme: "",

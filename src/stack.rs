@@ -41,6 +41,14 @@ impl Stack {
     pub fn peek(&self, distance: isize) -> Value {
         unsafe { *self.top.offset(-1 - distance) }
     }
+
+    pub fn read(&self, index: usize) -> Value {
+        self.data[index]
+    }
+
+    pub fn write(&mut self, index: usize, value: Value) {
+        self.data[index] = value;
+    }
 }
 
 impl Debug for Stack {

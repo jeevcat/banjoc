@@ -1,9 +1,9 @@
 use std::ptr::null;
 
 use crate::{
-    compiler,
     error::{LoxError, Result},
     gc::Gc,
+    parser,
     stack::Stack,
     table::Table,
 };
@@ -32,7 +32,7 @@ impl Vm {
     }
 
     pub fn interpret(&mut self, source: &str) -> Result<()> {
-        let chunk = compiler::compile(source, &mut self.gc)?;
+        let chunk = parser::compile(source, &mut self.gc)?;
 
         self.ip = chunk.code.as_ptr();
         self.chunk = Some(chunk);
@@ -157,6 +157,14 @@ impl Vm {
                             // The compiler never emits and instruct that refers to a non-string constant
                             _ => unreachable!(),
                         }
+                    }
+                    OpCode::GetLocal => {
+                        let slot = self.read_byte() as usize;
+                        self.stack.push(self.stack.read(slot));
+                    }
+                    OpCode::SetLocal => {
+                        let slot = self.read_byte() as usize;
+                        self.stack.write(slot, self.stack.peek(0));
                     }
                 }
             }

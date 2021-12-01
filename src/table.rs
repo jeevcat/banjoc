@@ -244,7 +244,6 @@ mod tests {
             let index = i * 3;
             t.remove(refs[index]);
             refs.remove(index);
-            dbg!(index);
         }
 
         // Check inserted values
