@@ -48,6 +48,7 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> usize {
             OpCode::SetLocal => byte_instruction("OP_SET_LOCAL", chunk, offset),
             OpCode::JumpIfFalse => jump_instruction("OP_JUMP_IF_FALSE", 1, chunk, offset),
             OpCode::Jump => jump_instruction("OP_JUMP", 1, chunk, offset),
+            OpCode::Loop => jump_instruction("OP_WHILE", -1, chunk, offset),
         },
         Err(_) => {
             println!("Unknown opcode {}", byte);

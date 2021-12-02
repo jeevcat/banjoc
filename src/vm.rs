@@ -176,6 +176,11 @@ impl Vm {
                         let offset = self.read_short();
                         self.ip = unsafe { self.ip.offset(offset as isize) };
                     }
+                    OpCode::Loop => {
+                        let offset = self.read_short();
+                        let offset = -(offset as isize);
+                        self.ip = unsafe { self.ip.offset(offset) };
+                    }
                 }
             }
         }

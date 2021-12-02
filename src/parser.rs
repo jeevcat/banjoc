@@ -140,6 +140,8 @@ impl<'source> Parser<'source> {
             self.end_scope();
         } else if self.advance_matching(TokenType::If) {
             self.if_statement();
+        } else if self.advance_matching(TokenType::While) {
+            self.while_statement();
         } else {
             self.expression_statement();
         }
@@ -166,6 +168,24 @@ impl<'source> Parser<'source> {
             self.statement();
         }
         self.patch_jump(else_jump);
+    }
+
+    fn while_statement(&mut self) {
+        let loop_start = self.current_chunk.code.len();
+        self.consume(TokenType::LeftParen, "Expect '(' after 'while'.");
+        self.expression();
+        self.consume(TokenType::RightParen, "Expect ')' after condition.");
+
+        let exit_jump = self.emit_jump(OpCode::JumpIfFalse);
+        // If we didn't jump ('while' expression was true), then pop the result of the expression before executing 'if' body
+        self.emit_opcode(OpCode::Pop);
+
+        self.statement();
+        self.emit_loop(loop_start);
+
+        self.patch_jump(exit_jump);
+        // If we did jump above ('while' expression was false), then pop the result of the expression before executing 'else' body (even if the else body is empty)
+        self.emit_opcode(OpCode::Pop);
     }
 
     fn expression_statement(&mut self) {
@@ -261,6 +281,32 @@ impl<'source> Parser<'source> {
             }
             _ => unreachable!(),
         }
+    }
+
+    fn and(&mut self, _can_assign: bool) {
+        // Here, the left operand expression has already been compiled
+        let end_jump = self.emit_jump(OpCode::JumpIfFalse);
+
+        self.emit_opcode(OpCode::Pop);
+        // Compile the right operand expression
+        self.parse_precedence(Precedence::And);
+
+        self.patch_jump(end_jump);
+    }
+
+    fn or(&mut self, _can_assign: bool) {
+        // Here, the left operand expression has already been compiled
+
+        // Simulate JumpIfTrue with two jumps #TODO would be more efficient with a dedicated opcode
+        let else_jump = self.emit_jump(OpCode::JumpIfFalse);
+        let end_jump = self.emit_jump(OpCode::Jump);
+
+        self.patch_jump(else_jump);
+        self.emit_opcode(OpCode::Pop);
+
+        // Compile the right operand expression
+        self.parse_precedence(Precedence::Or);
+        self.patch_jump(end_jump);
     }
 
     fn literal(&mut self, _can_assign: bool) {
@@ -448,10 +494,23 @@ impl<'source> Parser<'source> {
             self.error("Too much code to jump over.");
         }
 
-        let byte1 = (jump >> 8) & 0xff;
-        let byte2 = jump & 0xff;
+        let (byte1, byte2) = to_bytes(jump as u16);
         self.current_chunk.code[offset] = byte1 as u8;
         self.current_chunk.code[offset + 1] = byte2 as u8;
+    }
+
+    fn emit_loop(&mut self, loop_start: usize) {
+        self.emit_opcode(OpCode::Loop);
+
+        // +2: take into account the size of the 2-byte Loop operand
+        let offset = self.current_chunk.code.len() - loop_start + 2;
+        if offset > u16::MAX as usize {
+            self.error("Loop body too large");
+        }
+
+        let (byte1, byte2) = to_bytes(offset as u16);
+        self.emit_byte(byte1);
+        self.emit_byte(byte2);
     }
 
     fn error_at_current(&mut self, message: &str) {
@@ -580,7 +639,7 @@ impl<'source> ParseRuleTable<'source> {
             Identifier =>   ParseRule::new(Some(Parser::variable), None,                 P::None),
             String =>       ParseRule::new(Some(Parser::string),   None,                 P::None),
             Number =>       ParseRule::new(Some(Parser::number),   None,                 P::None),
-            And =>          ParseRule::new(None,                   None,                 P::None),
+            And =>          ParseRule::new(None,                   Some(Parser::and),    P::And),
             Class =>        ParseRule::new(None,                   None,                 P::None),
             Else =>         ParseRule::new(None,                   None,                 P::None),
             False =>        ParseRule::new(Some(Parser::literal),  None,                 P::None),
@@ -588,7 +647,7 @@ impl<'source> ParseRuleTable<'source> {
             Fun =>          ParseRule::new(None,                   None,                 P::None),
             If =>           ParseRule::new(None,                   None,                 P::None),
             Nil =>          ParseRule::new(Some(Parser::literal),  None,                 P::None),
-            Or =>           ParseRule::new(None,                   None,                 P::None),
+            Or =>           ParseRule::new(None,                   Some(Parser::or),     P::Or),
             Print =>        ParseRule::new(None,                   None,                 P::None),
             Return =>       ParseRule::new(None,                   None,                 P::None),
             Super =>        ParseRule::new(None,                   None,                 P::None),
@@ -609,4 +668,10 @@ impl<'source> Index<TokenType> for ParseRuleTable<'source> {
         let index: u8 = index.into();
         &self.0[index as usize]
     }
+}
+
+fn to_bytes(short: u16) -> (u8, u8) {
+    let byte1 = (short >> 8) & 0xff;
+    let byte2 = short & 0xff;
+    (byte1 as u8, byte2 as u8)
 }
