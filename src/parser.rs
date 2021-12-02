@@ -142,6 +142,8 @@ impl<'source> Parser<'source> {
             self.if_statement();
         } else if self.advance_matching(TokenType::While) {
             self.while_statement();
+        } else if self.advance_matching(TokenType::For) {
+            self.for_statement();
         } else {
             self.expression_statement();
         }
@@ -186,6 +188,65 @@ impl<'source> Parser<'source> {
         self.patch_jump(exit_jump);
         // If we did jump above ('while' expression was false), then pop the result of the expression before executing 'else' body (even if the else body is empty)
         self.emit_opcode(OpCode::Pop);
+    }
+
+    fn for_statement(&mut self) {
+        self.begin_scope();
+
+        self.consume(TokenType::LeftParen, "Expect '(' after 'for'.");
+
+        // Initializer clause
+        if self.advance_matching(TokenType::Semicolon) {
+            // No initializer
+        } else if self.advance_matching(TokenType::Var) {
+            self.var_declaration();
+        } else {
+            self.expression_statement();
+        }
+
+        let mut loop_start = self.current_chunk.code.len();
+
+        // Compile the for clause, if present
+        let exit_jump = {
+            if !self.advance_matching(TokenType::Semicolon) {
+                self.expression();
+                self.consume(TokenType::Semicolon, "Expect ';' after loop condition.");
+
+                // Jump out of the loop if the condition is false
+                let offset = self.emit_jump(OpCode::JumpIfFalse);
+                self.emit_opcode(OpCode::Pop); // Condition
+                Some(offset)
+            } else {
+                None
+            }
+        };
+
+        // Increment clause
+        if !self.advance_matching(TokenType::RightParen) {
+            // Jump to body of the loop
+            let body_jump = self.emit_jump(OpCode::Jump);
+            let increment_start = self.current_chunk.code.len();
+            self.expression();
+            self.emit_opcode(OpCode::Pop);
+            self.consume(TokenType::RightParen, "Expect ')' after for clauses.");
+
+            //
+            self.emit_loop(loop_start);
+            loop_start = increment_start;
+            self.patch_jump(body_jump);
+        }
+
+        self.statement();
+
+        self.emit_loop(loop_start);
+
+        // Patch the for clause jump, if it was present
+        if let Some(exit_jump) = exit_jump {
+            self.patch_jump(exit_jump);
+            self.emit_opcode(OpCode::Pop); // Condition
+        }
+
+        self.end_scope();
     }
 
     fn expression_statement(&mut self) {
