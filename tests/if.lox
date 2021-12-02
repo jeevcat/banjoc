@@ -1,0 +1,6 @@
+if (false) {
+    print "it works!";
+} else {
+    print "don't do this";
+}
+print "done!";

@@ -166,6 +166,16 @@ impl Vm {
                         let slot = self.read_byte() as usize;
                         self.stack.write(slot, self.stack.peek(0));
                     }
+                    OpCode::JumpIfFalse => {
+                        let offset = self.read_short();
+                        if self.stack.peek(0).is_falsey() {
+                            self.ip = unsafe { self.ip.offset(offset as isize) };
+                        }
+                    }
+                    OpCode::Jump => {
+                        let offset = self.read_short();
+                        self.ip = unsafe { self.ip.offset(offset as isize) };
+                    }
                 }
             }
         }
@@ -190,6 +200,12 @@ impl Vm {
         let byte = unsafe { *self.ip };
         self.ip = unsafe { self.ip.offset(1) };
         byte
+    }
+
+    fn read_short(&mut self) -> u16 {
+        let byte1 = self.read_byte();
+        let byte2 = self.read_byte();
+        (byte1 as u16) << 8 | (byte2 as u16)
     }
 
     fn read_constant(&mut self) -> Value {

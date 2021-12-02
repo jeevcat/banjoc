@@ -138,9 +138,34 @@ impl<'source> Parser<'source> {
             self.begin_scope();
             self.block();
             self.end_scope();
+        } else if self.advance_matching(TokenType::If) {
+            self.if_statement();
         } else {
             self.expression_statement();
         }
+    }
+
+    fn if_statement(&mut self) {
+        self.consume(TokenType::LeftParen, "Expect '(' after 'if'.");
+        self.expression();
+        self.consume(TokenType::RightParen, "Expect ')' after condition.");
+
+        let then_jump = self.emit_jump(OpCode::JumpIfFalse);
+        // If we didn't jump ('if' expression was true), then pop the result of the expression before executing 'if' body
+        self.emit_opcode(OpCode::Pop);
+
+        self.statement();
+
+        let else_jump = self.emit_jump(OpCode::Jump);
+
+        self.patch_jump(then_jump);
+        // If we did jump above ('if' expression was false), then pop the result of the expression before executing 'else' body (even if the else body is empty)
+        self.emit_opcode(OpCode::Pop);
+
+        if self.advance_matching(TokenType::Else) {
+            self.statement();
+        }
+        self.patch_jump(else_jump);
     }
 
     fn expression_statement(&mut self) {
@@ -406,6 +431,27 @@ impl<'source> Parser<'source> {
             return 0;
         }
         constant.try_into().unwrap()
+    }
+
+    fn emit_jump(&mut self, opcode: OpCode) -> usize {
+        self.emit_opcode(opcode);
+        self.emit_byte(0xff);
+        self.emit_byte(0xff);
+        self.current_chunk.code.len() - 2
+    }
+
+    fn patch_jump(&mut self, offset: usize) {
+        // -2 to adjust for the bytecode for the jump offset itself
+        let jump = self.current_chunk.code.len() - offset - 2;
+
+        if jump > u16::MAX as usize {
+            self.error("Too much code to jump over.");
+        }
+
+        let byte1 = (jump >> 8) & 0xff;
+        let byte2 = jump & 0xff;
+        self.current_chunk.code[offset] = byte1 as u8;
+        self.current_chunk.code[offset + 1] = byte2 as u8;
     }
 
     fn error_at_current(&mut self, message: &str) {
