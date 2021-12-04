@@ -159,9 +159,7 @@ impl Gc {
         }
     }
 
-    // Need to be able to create any of the object types on the heap, returning GcRef<"ObjectType">
-    // Need header to be able to point to GcRef<"ObjectType">
-    // Need gc.first to be able to point to GcRef<"ObjectType">
+    /// Move the provided object to the heap and track with the garbage collector
     pub fn alloc<T>(&mut self, object: T) -> GcRef<T>
     where
         T: MakeObj,

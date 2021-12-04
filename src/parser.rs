@@ -1,4 +1,7 @@
-use std::{mem::MaybeUninit, ops::Index};
+use std::{
+    mem::{self, MaybeUninit},
+    ops::Index,
+};
 
 use strum::{EnumCount, IntoEnumIterator};
 
@@ -21,13 +24,20 @@ pub fn compile(source: &str, gc: &mut Gc) -> Result<GcRef<Function>> {
     while !parser.advance_matching(TokenType::Eof) {
         parser.declaration();
     }
-    let function = parser.end_compiler()?;
-    Ok(gc.alloc(function))
+
+    parser.emit_return();
+    let function = parser.compiler.function;
+
+    if parser.had_error {
+        Err(LoxError::CompileError)
+    } else {
+        Ok(gc.alloc(function))
+    }
 }
 
 struct Parser<'source> {
     scanner: Scanner<'source>,
-    compiler: Compiler<'source>,
+    compiler: Box<Compiler<'source>>,
     current: Token<'source>,
     previous: Token<'source>,
     gc: &'source mut Gc,
@@ -42,7 +52,7 @@ impl<'source> Parser<'source> {
 
         Self {
             scanner,
-            compiler: Compiler::new(FunctionType::Script),
+            compiler: Box::new(Compiler::new(FunctionType::Script, None)),
             current: Token::none(),
             previous: Token::none(),
             gc,
@@ -102,6 +112,44 @@ impl<'source> Parser<'source> {
         self.consume(TokenType::RightBrace, "Expect '}' after block.");
     }
 
+    fn function(&mut self, function_type: FunctionType) {
+        self.push_compiler(function_type);
+        self.begin_scope();
+
+        self.consume(TokenType::LeftParen, "Expect '(' after function name.");
+        if !self.check(TokenType::RightParen) {
+            // Parse function parameters
+            loop {
+                self.compiler.function.arity += 1;
+
+                if self.compiler.function.arity > 255 {
+                    self.error_at_current("Can't have more than 255 parameters");
+                }
+                let constant = self.parse_variable("Expect parameter name");
+                self.define_variable(constant);
+
+                if !self.advance_matching(TokenType::Comma) {
+                    break;
+                }
+            }
+        }
+        self.consume(TokenType::RightParen, "Expect ')' after parameters.");
+        self.consume(TokenType::LeftBrace, "Expect '{' before function body.");
+        self.block();
+
+        let function = self.pop_compiler();
+        let value = Value::Function(self.gc.alloc(function));
+        let operand = self.make_constant(value);
+        self.emit_instruction(OpCode::Constant, operand)
+    }
+
+    fn fun_declaration(&mut self) {
+        let global = self.parse_variable("Expect function name.");
+        self.compiler.mark_var_initialized();
+        self.function(FunctionType::Function);
+        self.define_variable(global);
+    }
+
     fn var_declaration(&mut self) {
         let global = self.parse_variable("Expect variable name.");
 
@@ -119,7 +167,9 @@ impl<'source> Parser<'source> {
     }
 
     fn declaration(&mut self) {
-        if self.advance_matching(TokenType::Var) {
+        if self.advance_matching(TokenType::Fun) {
+            self.fun_declaration();
+        } else if self.advance_matching(TokenType::Var) {
             self.var_declaration();
         } else {
             self.statement();
@@ -447,7 +497,7 @@ impl<'source> Parser<'source> {
 
     fn define_variable(&mut self, global: u8) {
         if self.compiler.is_local_scope() {
-            self.compiler.mark_local_initialized();
+            self.compiler.mark_var_initialized();
             // For local variables, we just save references to values on the stack. No need to store them somewhere else like globals do.
             return;
         }
@@ -484,7 +534,14 @@ impl<'source> Parser<'source> {
         &self.rules[token_type]
     }
 
-    fn end_compiler(mut self) -> Result<Function> {
+    fn push_compiler(&mut self, function_type: FunctionType) {
+        let function_name = self.gc.intern(self.previous.lexeme.to_owned());
+        let new_compiler = Box::new(Compiler::new(function_type, Some(function_name)));
+        let old_compiler = mem::replace(&mut self.compiler, new_compiler);
+        self.compiler.enclosing = Some(old_compiler);
+    }
+
+    fn pop_compiler(&mut self) -> Function {
         self.emit_return();
 
         #[cfg(feature = "debug_trace_execution")]
@@ -501,11 +558,13 @@ impl<'source> Parser<'source> {
             }
         }
 
-        if self.had_error {
-            Err(LoxError::CompileError)
-        } else {
-            Ok(self.compiler.function)
-        }
+        let enclosing = self
+            .compiler
+            .enclosing
+            .take()
+            .unwrap_or_else(|| panic!("Didn't find and enclosing compiler."));
+        let compiler = mem::replace(&mut self.compiler, enclosing);
+        compiler.function
     }
 
     fn begin_scope(&mut self) {

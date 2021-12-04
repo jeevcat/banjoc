@@ -44,18 +44,18 @@ pub fn hash_string(string: &str) -> u32 {
 
 pub struct Function {
     pub header: ObjHeader,
-    arity: i32,
+    pub arity: i32,
     pub chunk: Chunk,
     pub name: Option<GcRef<LoxString>>,
 }
 
 impl Function {
-    pub fn new() -> Self {
+    pub fn new(name: Option<GcRef<LoxString>>) -> Self {
         Self {
             header: ObjHeader::new(),
             arity: 0,
             chunk: Chunk::new(),
-            name: None,
+            name,
         }
     }
 }
