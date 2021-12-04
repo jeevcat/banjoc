@@ -1,37 +1,13 @@
-use std::fmt::Display;
+use std::fmt::{Display, Write};
 
-use crate::gc::GcRef;
-
-// Obj is a wrapper which is copied around on the stack, and refers to gc objects on the heap
-#[derive(Clone, Copy)]
-pub enum Obj {
-    String(GcRef<LoxString>),
-}
-
-impl Obj {
-    // #TODO Could optimize this with punning: mem::transmute
-    pub fn header(&mut self) -> &mut ObjHeader {
-        match self {
-            Obj::String(s) => &mut s.header,
-        }
-    }
-}
-
-impl Display for Obj {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Obj::String(x) => x.fmt(f),
-        }
-    }
-}
-
-pub struct ObjHeader {
-    pub next: Option<Obj>,
-}
+use crate::{
+    chunk::Chunk,
+    gc::{GcRef, ObjHeader},
+};
 
 pub struct LoxString {
     pub header: ObjHeader,
-    pub string: String,
+    string: String,
     pub hash: u32,
 }
 
@@ -39,10 +15,14 @@ impl LoxString {
     pub fn new(string: String) -> LoxString {
         let hash = hash_string(&string);
         LoxString {
-            header: ObjHeader { next: None },
+            header: ObjHeader::new(),
             string,
             hash,
         }
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.string.as_str()
     }
 }
 
@@ -60,4 +40,35 @@ pub fn hash_string(string: &str) -> u32 {
         hash = hash.wrapping_mul(16777619u32);
     }
     hash
+}
+
+pub struct Function {
+    pub header: ObjHeader,
+    arity: i32,
+    pub chunk: Chunk,
+    pub name: Option<GcRef<LoxString>>,
+}
+
+impl Function {
+    pub fn new() -> Self {
+        Self {
+            header: ObjHeader::new(),
+            arity: 0,
+            chunk: Chunk::new(),
+            name: None,
+        }
+    }
+}
+
+impl Display for Function {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(name) = self.name {
+            f.write_str("<fn ")?;
+            name.string.fmt(f)?;
+            f.write_char('>')?;
+        } else {
+            f.write_str("<script>")?;
+        }
+        Ok(())
+    }
 }

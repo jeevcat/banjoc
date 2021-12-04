@@ -1,10 +1,19 @@
 use crate::{
     error::{LoxError, Result},
+    obj::Function,
     scanner::Token,
 };
 
+#[derive(Clone, Copy)]
+pub enum FunctionType {
+    Script,
+    Function,
+}
+
 pub struct Compiler<'source> {
     locals: [Local<'source>; Compiler::MAX_LOCAL_COUNT],
+    pub function: Function,
+    function_type: FunctionType,
     /// How many locals are currently in scope
     local_count: usize,
     /// The number of blocks surrounding the current bit of code
@@ -13,14 +22,20 @@ pub struct Compiler<'source> {
 
 impl<'source> Compiler<'source> {
     const MAX_LOCAL_COUNT: usize = u8::MAX as usize + 1;
-    pub fn new() -> Self {
+
+    pub fn new(function_type: FunctionType) -> Self {
         const INIT: Local = Local {
             name: Token::none(),
             depth: 0,
         };
+        // Claim stack slot zero for the VM's own internal use
+        let local_count = 1;
+
         Self {
             locals: [INIT; Compiler::MAX_LOCAL_COUNT],
-            local_count: 0,
+            function: Function::new(),
+            function_type,
+            local_count,
             scope_depth: 0,
         }
     }

@@ -2,40 +2,44 @@ use std::ptr::null;
 
 use crate::{
     error::{LoxError, Result},
-    gc::Gc,
+    gc::{Gc, GcRef},
+    obj::Function,
     parser,
     stack::Stack,
     table::Table,
 };
 
-use crate::{chunk::Chunk, op_code::OpCode, value::Value};
+use crate::{op_code::OpCode, value::Value};
 
 pub struct Vm {
-    chunk: Option<Chunk>,
-    ip: *const u8,
-    stack: Stack,
+    stack: Stack<Value, { Vm::STACK_MAX }>,
+    frames: Stack<CallFrame, { Vm::FRAMES_MAX }>,
     globals: Table,
     gc: Gc,
 }
 
 impl Vm {
+    const FRAMES_MAX: usize = 64;
+    const STACK_MAX: usize = Self::FRAMES_MAX * 8;
+
     pub fn new() -> Vm {
-        let mut vm = Vm {
-            ip: null(),
-            chunk: None,
+        Vm {
             stack: Stack::new(),
+            frames: Stack::new(),
             globals: Table::new(),
             gc: Gc::new(),
-        };
-        vm.stack.initialize();
-        vm
+        }
     }
 
     pub fn interpret(&mut self, source: &str) -> Result<()> {
-        let chunk = parser::compile(source, &mut self.gc)?;
+        let function = parser::compile(source, &mut self.gc)?;
 
-        self.ip = chunk.code.as_ptr();
-        self.chunk = Some(chunk);
+        self.stack.push(Value::Function(function));
+        self.frames.push(CallFrame {
+            function,
+            ip: function.chunk.code.as_ptr(),
+            slot: self.stack.get_offset(),
+        });
 
         self.run()
     }
@@ -47,17 +51,15 @@ impl Vm {
             {
                 print!("        ");
                 println!("{:?}", self.stack);
-                match &self.chunk {
-                    Some(chunk) => crate::disassembler::disassemble_instruction_ptr(chunk, self.ip),
-                    None => return Err(LoxError::RuntimeError),
-                };
+                let frame = self.current_frame();
+                crate::disassembler::disassemble_instruction_ptr(&frame.function.chunk, frame.ip);
             }
-            let instruction = self.read_byte();
+            let instruction = self.current_frame().read_byte();
             if let Ok(instruction) = instruction.try_into() {
                 match instruction {
                     OpCode::Add => {
-                        let b = self.stack.peek(0);
-                        let a = self.stack.peek(1);
+                        let b = *self.stack.peek(0);
+                        let a = *self.stack.peek(1);
                         match (a, b) {
                             (Value::Number(a), Value::Number(b)) => {
                                 self.stack.pop();
@@ -68,7 +70,8 @@ impl Vm {
                             (Value::String(a), Value::String(b)) => {
                                 self.stack.pop();
                                 self.stack.pop();
-                                let result = self.gc.alloc(format!("{}{}", &a.string, &b.string));
+                                let result =
+                                    self.gc.intern(format!("{}{}", a.as_str(), b.as_str()));
                                 self.stack.push(Value::String(result));
                             }
                             _ => {
@@ -78,13 +81,13 @@ impl Vm {
                         }
                     }
                     OpCode::Constant => {
-                        let constant = self.read_constant();
+                        let constant = self.current_frame().read_constant();
                         self.stack.push(constant);
                     }
                     OpCode::Divide => self.binary_op(|a, b| Value::Number(a / b))?,
                     OpCode::Multiply => self.binary_op(|a, b| Value::Number(a * b))?,
                     OpCode::Negate => {
-                        if let Value::Number(value) = self.stack.peek(0) {
+                        if let Value::Number(value) = *self.stack.peek(0) {
                             self.stack.pop();
                             self.stack.push(Value::Number(-value));
                         } else {
@@ -115,10 +118,10 @@ impl Vm {
                         self.stack.pop();
                     }
                     OpCode::DefineGlobal => {
-                        let value = self.read_constant();
+                        let value = self.current_frame().read_constant();
                         match value {
                             Value::String(name) => {
-                                self.globals.insert(name, self.stack.peek(0));
+                                self.globals.insert(name, *self.stack.peek(0));
                                 self.stack.pop();
                             }
                             // The compiler never emits and instruct that refers to a non-string constant
@@ -126,7 +129,7 @@ impl Vm {
                         }
                     }
                     OpCode::GetGlobal => {
-                        let value = self.read_constant();
+                        let value = self.current_frame().read_constant();
                         match value {
                             Value::String(name) => {
                                 if let Some(value) = self.globals.get(name) {
@@ -134,7 +137,7 @@ impl Vm {
                                 } else {
                                     return self.runtime_error(&format!(
                                         "Undefined variable '{}'.",
-                                        name.string
+                                        name.as_str()
                                     ));
                                 }
                             }
@@ -143,14 +146,14 @@ impl Vm {
                         }
                     }
                     OpCode::SetGlobal => {
-                        let value = self.read_constant();
+                        let value = self.current_frame().read_constant();
                         match value {
                             Value::String(name) => {
-                                if self.globals.insert(name, self.stack.peek(0)) {
+                                if self.globals.insert(name, *self.stack.peek(0)) {
                                     self.globals.remove(name);
                                     return self.runtime_error(&format!(
                                         "Undefined variable '{}'.",
-                                        name.string
+                                        name.as_str()
                                     ));
                                 }
                             }
@@ -159,36 +162,44 @@ impl Vm {
                         }
                     }
                     OpCode::GetLocal => {
-                        let slot = self.read_byte() as usize;
-                        self.stack.push(self.stack.read(slot));
+                        let slot = self.current_frame().read_byte() as usize;
+                        let offset = self.current_frame().slot;
+                        self.stack.push(*self.stack.read(offset + slot));
                     }
                     OpCode::SetLocal => {
-                        let slot = self.read_byte() as usize;
-                        self.stack.write(slot, self.stack.peek(0));
+                        let slot = self.current_frame().read_byte() as usize;
+                        let offset = self.current_frame().slot;
+                        self.stack.write(offset + slot, *self.stack.peek(0));
                     }
                     OpCode::JumpIfFalse => {
-                        let offset = self.read_short();
+                        let offset = self.current_frame().read_short();
                         if self.stack.peek(0).is_falsey() {
-                            self.ip = unsafe { self.ip.offset(offset as isize) };
+                            self.current_frame().apply_offset(offset as isize);
                         }
                     }
                     OpCode::Jump => {
-                        let offset = self.read_short();
-                        self.ip = unsafe { self.ip.offset(offset as isize) };
+                        let frame = self.current_frame();
+                        let offset = frame.read_short();
+                        frame.apply_offset(offset as isize);
                     }
                     OpCode::Loop => {
-                        let offset = self.read_short();
+                        let frame = self.current_frame();
+                        let offset = frame.read_short();
                         let offset = -(offset as isize);
-                        self.ip = unsafe { self.ip.offset(offset) };
+                        frame.apply_offset(offset);
                     }
                 }
             }
         }
     }
 
+    fn current_frame(&mut self) -> &mut CallFrame {
+        self.frames.top()
+    }
+
     fn binary_op(&mut self, f: impl Fn(f64, f64) -> Value) -> Result<()> {
-        let b = self.stack.peek(0);
-        let a = self.stack.peek(1);
+        let b = *self.stack.peek(0);
+        let a = *self.stack.peek(1);
         match (a, b) {
             (Value::Number(a), Value::Number(b)) => {
                 self.stack.pop();
@@ -201,6 +212,38 @@ impl Vm {
         }
     }
 
+    fn runtime_error(&self, message: &str) -> Result<()> {
+        let frame = self.frames.peek(0);
+        let chunk = &frame.function.chunk;
+        let instruction = unsafe { frame.ip.offset_from(chunk.code.as_ptr()) - 1 } as usize;
+        let line = chunk.lines[instruction];
+        eprintln!("{}", message);
+        eprintln!("[line {}] in script", line);
+        Err(LoxError::RuntimeError)
+    }
+}
+
+/// Represents a single ongoing function call
+struct CallFrame {
+    function: GcRef<Function>,
+    /// The instruction pointer of this function. Returning from this function will resume from here.
+    // #TODO NonNull?
+    ip: *const u8,
+    /// The first slot in the VM's value stack that this function can use
+    slot: usize,
+}
+
+impl Default for CallFrame {
+    fn default() -> Self {
+        Self {
+            ip: null(),
+            slot: 0,
+            function: GcRef::dangling(),
+        }
+    }
+}
+
+impl CallFrame {
     fn read_byte(&mut self) -> u8 {
         let byte = unsafe { *self.ip };
         self.ip = unsafe { self.ip.offset(1) };
@@ -215,16 +258,10 @@ impl Vm {
 
     fn read_constant(&mut self) -> Value {
         let index: usize = self.read_byte().try_into().unwrap();
-        // Only called when we know chunk is Some
-        self.chunk.as_ref().unwrap().constants[index]
+        self.function.chunk.constants[index]
     }
 
-    fn runtime_error(&self, message: &str) -> Result<()> {
-        let chunk = self.chunk.as_ref().unwrap();
-        let instruction = unsafe { self.ip.offset_from(chunk.code.as_ptr()) - 1 } as usize;
-        let line = chunk.lines[instruction];
-        eprintln!("{}", message);
-        eprintln!("[line {}] in script", line);
-        Err(LoxError::RuntimeError)
+    fn apply_offset(&mut self, offset: isize) {
+        self.ip = unsafe { self.ip.offset(offset) };
     }
 }

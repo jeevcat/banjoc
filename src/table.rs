@@ -79,7 +79,9 @@ impl Table {
             let entry = &self.entries[index];
             match entry.key {
                 Some(key) => {
-                    if key.string.len() == string.len() && key.hash == hash && key.string == string
+                    if key.as_str().len() == string.len()
+                        && key.hash == hash
+                        && key.as_str() == string
                     {
                         // We found it
                         return Some(key);
@@ -271,6 +273,6 @@ mod tests {
     }
 
     fn str_to_num(string: GcRef<LoxString>) -> i32 {
-        string.string.parse().unwrap()
+        string.as_str().parse().unwrap()
     }
 }
