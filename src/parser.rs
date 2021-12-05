@@ -25,8 +25,7 @@ pub fn compile(source: &str, gc: &mut Gc) -> Result<GcRef<Function>> {
         parser.declaration();
     }
 
-    parser.emit_return();
-    let function = parser.compiler.function;
+    let function = parser.pop_compiler();
 
     if parser.had_error {
         Err(LoxError::CompileError)
@@ -193,6 +192,8 @@ impl<'source> Parser<'source> {
             self.while_statement();
         } else if self.advance_matching(TokenType::For) {
             self.for_statement();
+        } else if self.advance_matching(TokenType::Return) {
+            self.return_statement();
         } else {
             self.expression_statement();
         }
@@ -310,6 +311,20 @@ impl<'source> Parser<'source> {
         self.emit_opcode(OpCode::Print);
     }
 
+    fn return_statement(&mut self) {
+        if matches!(self.compiler.function_type, FunctionType::Script) {
+            self.error("Can't return from top-level code.");
+        }
+
+        if self.advance_matching(TokenType::Semicolon) {
+            self.emit_return();
+        } else {
+            self.expression();
+            self.consume(TokenType::Semicolon, "Expect ';' after return value.");
+            self.emit_opcode(OpCode::Return);
+        }
+    }
+
     fn synchronize(&mut self) {
         self.panic_mode = false;
 
@@ -344,6 +359,11 @@ impl<'source> Parser<'source> {
     fn grouping(&mut self, _can_assign: bool) {
         self.expression();
         self.consume(TokenType::RightParen, "Expect ')' after expression.");
+    }
+
+    fn call(&mut self, _can_assign: bool) {
+        let arg_count = self.argument_list();
+        self.emit_instruction(OpCode::Call, arg_count);
     }
 
     fn unary(&mut self, _can_assign: bool) {
@@ -519,6 +539,26 @@ impl<'source> Parser<'source> {
         self.add_local(name);
     }
 
+    fn argument_list(&mut self) -> u8 {
+        let mut arg_count = 0;
+
+        if !self.check(TokenType::RightParen) {
+            loop {
+                self.expression();
+                if arg_count == 255 {
+                    self.error("Can't have more than 255 arguments.");
+                }
+                arg_count += 1;
+
+                if !self.advance_matching(TokenType::Comma) {
+                    break;
+                }
+            }
+        }
+        self.consume(TokenType::RightParen, "Expect ')' after arguments.");
+        arg_count
+    }
+
     fn add_local(&mut self, name: Token<'source>) {
         if self.compiler.add_local(name).is_err() {
             self.error("Too many local variables in function.")
@@ -558,13 +598,17 @@ impl<'source> Parser<'source> {
             }
         }
 
-        let enclosing = self
-            .compiler
-            .enclosing
-            .take()
-            .unwrap_or_else(|| panic!("Didn't find and enclosing compiler."));
-        let compiler = mem::replace(&mut self.compiler, enclosing);
-        compiler.function
+        if let Some(enclosing) = self.compiler.enclosing.take() {
+            let compiler = mem::replace(&mut self.compiler, enclosing);
+            compiler.function
+        } else {
+            // TODO no need to put a random object into self.compiler
+            let compiler = mem::replace(
+                &mut self.compiler,
+                Box::new(Compiler::new(FunctionType::Script, None)),
+            );
+            compiler.function
+        }
     }
 
     fn begin_scope(&mut self) {
@@ -600,6 +644,7 @@ impl<'source> Parser<'source> {
     }
 
     fn emit_return(&mut self) {
+        self.emit_opcode(OpCode::Nil);
         self.emit_opcode(OpCode::Return);
     }
 
@@ -751,7 +796,7 @@ impl<'source> ParseRuleTable<'source> {
         use Precedence as P;
         use TokenType::*;
         match token_type {
-            LeftParen =>    ParseRule::new(Some(Parser::grouping), None,                 P::None),
+            LeftParen =>    ParseRule::new(Some(Parser::grouping), Some(Parser::call),   P::Call),
             RightParen =>   ParseRule::new(None,                   None,                 P::None),
             LeftBrace =>    ParseRule::new(None,                   None,                 P::None),
             RightBrace =>   ParseRule::new(None,                   None,                 P::None),

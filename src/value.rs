@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::{
     gc::GcRef,
-    obj::{Function, LoxString},
+    obj::{Function, LoxString, NativeFunction},
 };
 
 #[derive(Clone, Copy)]
@@ -13,6 +13,7 @@ pub enum Value {
     // Following are pointers to garbage collected objects. Value is NOT deep copied.
     String(GcRef<LoxString>),
     Function(GcRef<Function>),
+    NativeFunction(GcRef<NativeFunction>),
 }
 
 impl Value {
@@ -33,6 +34,7 @@ impl Display for Value {
             Value::Number(x) => x.fmt(f),
             Value::String(x) => x.fmt(f),
             Value::Function(x) => x.fmt(f),
+            Value::NativeFunction(x) => x.fmt(f),
         }
     }
 }
@@ -45,6 +47,7 @@ impl PartialEq for Value {
             (Value::Nil, Value::Nil) => true,
             (Value::String(a), Value::String(b)) => a == b,
             (Value::Function(a), Value::Function(b)) => a == b,
+            (Value::NativeFunction(a), Value::NativeFunction(b)) => a == b,
             _ => false,
         }
     }

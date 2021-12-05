@@ -1,8 +1,9 @@
-use std::fmt::{Display, Write};
+use std::fmt::{Debug, Display, Write};
 
 use crate::{
     chunk::Chunk,
     gc::{GcRef, ObjHeader},
+    value::Value,
 };
 
 pub struct LoxString {
@@ -28,7 +29,7 @@ impl LoxString {
 
 impl Display for LoxString {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.string.fmt(f)
+        Display::fmt(&self.string, f)
     }
 }
 
@@ -44,7 +45,7 @@ pub fn hash_string(string: &str) -> u32 {
 
 pub struct Function {
     pub header: ObjHeader,
-    pub arity: i32,
+    pub arity: usize,
     pub chunk: Chunk,
     pub name: Option<GcRef<LoxString>>,
 }
@@ -64,11 +65,39 @@ impl Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(name) = self.name {
             f.write_str("<fn ")?;
-            name.string.fmt(f)?;
+            Display::fmt(&name.string, f)?;
             f.write_char('>')?;
         } else {
             f.write_str("<script>")?;
         }
+        Ok(())
+    }
+}
+
+impl Debug for Function {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(self, f)
+    }
+}
+
+pub type NativeFn = fn(args: &[Value]) -> Value;
+pub struct NativeFunction {
+    pub header: ObjHeader,
+    pub function: NativeFn,
+}
+
+impl NativeFunction {
+    pub fn new(function: NativeFn) -> Self {
+        Self {
+            header: ObjHeader::new(),
+            function,
+        }
+    }
+}
+
+impl Display for NativeFunction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("<native fn>")?;
         Ok(())
     }
 }

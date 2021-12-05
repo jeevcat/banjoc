@@ -15,9 +15,10 @@ pub enum FunctionType {
 pub struct Compiler<'source> {
     // TODO can this be improved without using the heap?
     pub enclosing: Option<Box<Compiler<'source>>>,
+    /// Keeps track of which stack slots are associated with which local variables or temporaries
     locals: [Local<'source>; Compiler::MAX_LOCAL_COUNT],
     pub function: Function,
-    function_type: FunctionType,
+    pub function_type: FunctionType,
     /// How many locals are currently in scope
     local_count: usize,
     /// The number of blocks surrounding the current bit of code

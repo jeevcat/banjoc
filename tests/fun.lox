@@ -1,5 +1,5 @@
-fun areWeHavingItYet() {
-    print "Yes we are!";
+fun sum(a, b, c) {
+    return c + b + a;
 }
 
-print areWeHavingItYet;
+print 4 + sum(5, 6, 7);

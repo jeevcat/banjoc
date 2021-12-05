@@ -38,6 +38,23 @@ where
         }
     }
 
+    pub fn pop_n(&mut self, num: usize) -> &[T] {
+        debug_assert!(self.index >= num);
+        unsafe {
+            self.index -= num;
+            std::slice::from_raw_parts(self.data.get_unchecked_mut(self.index).as_ptr(), num)
+        }
+    }
+
+    /// Pop all of the values from a given index, INCLUSIVE
+    /// e.g. stack: 0,1,2,3
+    /// stack.pop_all_from(2) -> stack: 0,1
+    pub fn pop_all_from(&mut self, index: usize) {
+        debug_assert!(index <= N);
+        debug_assert!(index <= self.index);
+        self.index = index;
+    }
+
     pub fn peek(&self, distance: usize) -> &T {
         debug_assert!(distance < self.index);
         let index = (self.index - distance - 1) as usize;
@@ -61,6 +78,10 @@ where
                 .get_unchecked_mut(self.index - 1)
                 .assume_init_mut()
         }
+    }
+
+    pub fn len(&self) -> usize {
+        self.index
     }
 
     pub fn get_offset(&self) -> usize {
