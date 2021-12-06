@@ -6,7 +6,7 @@ use std::{
 use crate::{
     error::{LoxError, Result},
     gc::{Gc, GcRef},
-    obj::{Function, NativeFn, NativeFunction},
+    obj::{Closure, NativeFn, NativeFunction},
     parser,
     stack::Stack,
     table::Table,
@@ -46,9 +46,15 @@ impl Vm {
     }
 
     pub fn interpret(&mut self, source: &str) -> Result<()> {
+        // All this stack pushing and popping is to cool the carbage collector happy?
         let function = parser::compile(source, &mut self.gc)?;
+        self.stack.push(Value::Function(function));
+        let closure = Closure::new(function);
+        self.stack.pop();
+        let closure = self.gc.alloc(closure);
+        self.stack.push(Value::Closure(closure));
 
-        self.call(function, 0)?;
+        self.call(closure, 0)?;
 
         self.run()
     }
@@ -61,7 +67,10 @@ impl Vm {
                 print!("        ");
                 println!("{:?}", self.stack);
                 let frame = self.current_frame();
-                crate::disassembler::disassemble_instruction_ptr(&frame.function.chunk, frame.ip);
+                crate::disassembler::disassemble_instruction_ptr(
+                    &frame.closure.function.chunk,
+                    frame.ip,
+                );
             }
             let instruction = self.current_frame().read_byte();
             if let Ok(instruction) = instruction.try_into() {
@@ -205,6 +214,17 @@ impl Vm {
                         let arg_count = self.current_frame().read_byte() as usize;
                         self.call_value(*self.stack.peek(arg_count), arg_count)?;
                     }
+                    OpCode::Closure => {
+                        let function = self.current_frame().read_constant();
+                        match function {
+                            Value::Function(function) => {
+                                let closure = Closure::new(function);
+                                let closure = self.gc.alloc(closure);
+                                self.stack.push(Value::Closure(closure));
+                            }
+                            _ => unreachable!(),
+                        }
+                    }
                 }
             }
         }
@@ -231,7 +251,6 @@ impl Vm {
 
     fn call_value(&mut self, callee: Value, arg_count: usize) -> Result<()> {
         match callee {
-            Value::Function(callee) => self.call(callee, arg_count),
             Value::NativeFunction(callee) => {
                 let args = self.stack.pop_n(arg_count);
                 let result = (callee.function)(args);
@@ -239,15 +258,16 @@ impl Vm {
                 self.stack.push(result);
                 Ok(())
             }
+            Value::Closure(callee) => self.call(callee, arg_count),
             _ => self.runtime_error("Can only call functions and classes."),
         }
     }
 
-    fn call(&mut self, callee: GcRef<Function>, arg_count: usize) -> Result<()> {
-        if arg_count != callee.arity {
+    fn call(&mut self, callee: GcRef<Closure>, arg_count: usize) -> Result<()> {
+        if arg_count != callee.function.arity {
             return self.runtime_error(&format!(
                 "Expected {} arguments but got {}.",
-                callee.arity, arg_count
+                callee.function.arity, arg_count
             ));
         }
 
@@ -271,11 +291,11 @@ impl Vm {
         // Print callstack
         for i in (0..self.frames.len()).rev() {
             let frame = self.frames.read(i);
-            let function = frame.function;
+            let closure = frame.closure;
             let instruction =
-                unsafe { frame.ip.offset_from(function.chunk.code.as_ptr()) - 1 } as usize;
-            let line = function.chunk.lines[instruction];
-            eprintln!("[line {}] in {}", line, *function);
+                unsafe { frame.ip.offset_from(closure.function.chunk.code.as_ptr()) - 1 } as usize;
+            let line = closure.function.chunk.lines[instruction];
+            eprintln!("[line {}] in {}", line, *closure);
         }
 
         Err(LoxError::RuntimeError)
@@ -296,7 +316,7 @@ impl Vm {
 
 /// Represents a single ongoing function call
 struct CallFrame {
-    function: GcRef<Function>,
+    closure: GcRef<Closure>,
     /// The instruction pointer of this function. Returning from this function will resume from here.
     // #TODO NonNull?
     ip: *const u8,
@@ -309,16 +329,16 @@ impl Default for CallFrame {
         Self {
             ip: null(),
             slot: 0,
-            function: GcRef::dangling(),
+            closure: GcRef::dangling(),
         }
     }
 }
 
 impl CallFrame {
-    fn new(function: GcRef<Function>, slot: usize) -> Self {
+    fn new(closure: GcRef<Closure>, slot: usize) -> Self {
         Self {
-            function,
-            ip: function.chunk.code.as_ptr(),
+            closure,
+            ip: closure.function.chunk.code.as_ptr(),
             slot,
         }
     }
@@ -336,7 +356,7 @@ impl CallFrame {
 
     fn read_constant(&mut self) -> Value {
         let index: usize = self.read_byte().try_into().unwrap();
-        self.function.chunk.constants[index]
+        self.closure.function.chunk.constants[index]
     }
     fn read_local_offset(&mut self) -> usize {
         let offset = self.read_byte() as usize;

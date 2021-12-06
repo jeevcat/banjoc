@@ -41,4 +41,5 @@ pub enum OpCode {
     Loop,
 
     Call,
+    Closure,
 }

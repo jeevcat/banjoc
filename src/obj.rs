@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Display, Write};
+use std::fmt::{Debug, Display, Formatter, Write};
 
 use crate::{
     chunk::Chunk,
@@ -28,7 +28,7 @@ impl LoxString {
 }
 
 impl Display for LoxString {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.string, f)
     }
 }
@@ -62,7 +62,7 @@ impl Function {
 }
 
 impl Display for Function {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let Some(name) = self.name {
             f.write_str("<fn ")?;
             Display::fmt(&name.string, f)?;
@@ -75,7 +75,7 @@ impl Display for Function {
 }
 
 impl Debug for Function {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         Display::fmt(self, f)
     }
 }
@@ -96,8 +96,28 @@ impl NativeFunction {
 }
 
 impl Display for NativeFunction {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str("<native fn>")?;
         Ok(())
+    }
+}
+
+pub struct Closure {
+    pub header: ObjHeader,
+    pub function: GcRef<Function>,
+}
+
+impl Closure {
+    pub fn new(function: GcRef<Function>) -> Self {
+        Self {
+            header: ObjHeader::new(),
+            function,
+        }
+    }
+}
+
+impl Display for Closure {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&*self.function, f)
     }
 }

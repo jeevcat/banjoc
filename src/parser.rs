@@ -138,8 +138,8 @@ impl<'source> Parser<'source> {
 
         let function = self.pop_compiler();
         let value = Value::Function(self.gc.alloc(function));
-        let operand = self.make_constant(value);
-        self.emit_instruction(OpCode::Constant, operand)
+        let constant = self.make_constant(value);
+        self.emit_instruction(OpCode::Closure, constant)
     }
 
     fn fun_declaration(&mut self) {

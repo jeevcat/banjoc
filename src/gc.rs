@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    obj::{hash_string, Function, LoxString, NativeFunction},
+    obj::{hash_string, Closure, Function, LoxString, NativeFunction},
     table::Table,
     value::Value,
 };
@@ -74,6 +74,7 @@ pub enum Obj {
     String(GcRef<LoxString>),
     Function(GcRef<Function>),
     NativeFunction(GcRef<NativeFunction>),
+    Closure(GcRef<Closure>),
 }
 
 impl Obj {
@@ -83,6 +84,7 @@ impl Obj {
             Obj::String(x) => &mut x.header,
             Obj::Function(x) => &mut x.header,
             Obj::NativeFunction(x) => &mut x.header,
+            Obj::Closure(x) => &mut x.header,
         }
     }
 
@@ -91,6 +93,7 @@ impl Obj {
             Obj::String(x) => x.drop_ptr(),
             Obj::Function(x) => x.drop_ptr(),
             Obj::NativeFunction(x) => x.drop_ptr(),
+            Obj::Closure(x) => x.drop_ptr(),
         }
     }
 
@@ -108,6 +111,7 @@ impl Display for Obj {
             Obj::String(x) => x.fmt(f),
             Obj::Function(x) => x.fmt(f),
             Obj::NativeFunction(x) => x.fmt(f),
+            Obj::Closure(x) => x.fmt(f),
         }
     }
 }
@@ -142,6 +146,15 @@ impl MakeObj for NativeFunction {
         Self: Sized,
     {
         Obj::NativeFunction(gc_ref)
+    }
+}
+
+impl MakeObj for Closure {
+    fn make_obj(gc_ref: GcRef<Self>) -> Obj
+    where
+        Self: Sized,
+    {
+        Obj::Closure(gc_ref)
     }
 }
 
