@@ -48,6 +48,7 @@ pub struct Function {
     pub arity: usize,
     pub chunk: Chunk,
     pub name: Option<GcRef<LoxString>>,
+    pub upvalue_count: usize,
 }
 
 impl Function {
@@ -57,6 +58,7 @@ impl Function {
             arity: 0,
             chunk: Chunk::new(),
             name,
+            upvalue_count: 0,
         }
     }
 }

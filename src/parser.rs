@@ -137,9 +137,15 @@ impl<'source> Parser<'source> {
         self.block();
 
         let function = self.pop_compiler();
+        let upvalue_count = function.upvalue_count;
         let value = Value::Function(self.gc.alloc(function));
         let constant = self.make_constant(value);
-        self.emit_instruction(OpCode::Closure, constant)
+        self.emit_instruction(OpCode::Closure, constant);
+
+        for i in 0..upvalue_count {
+            self.emit_byte(if self.compiler.upvalues[i].is_local { 1 } else { 0 });
+            self.emit_byte(self.compiler.upvalues[i].index);
+        }
     }
 
     fn fun_declaration(&mut self) {
@@ -313,7 +319,7 @@ impl<'source> Parser<'source> {
 
     fn return_statement(&mut self) {
         if matches!(self.compiler.function_type, FunctionType::Script) {
-            self.error("Can't return from top-level code.");
+            self.error_str("Can't return from top-level code.");
         }
 
         if self.advance_matching(TokenType::Semicolon) {
@@ -455,16 +461,17 @@ impl<'source> Parser<'source> {
     }
 
     fn variable(&mut self, can_assign: bool) {
-        self.named_variable(self.previous, can_assign)
+        if let Err(err) = self.named_variable(self.previous, can_assign) {
+            self.error(err)
+        }
     }
 
-    fn named_variable(&mut self, name: Token, can_assign: bool) {
+    fn named_variable(&mut self, name: Token, can_assign: bool) -> Result<()> {
         let (operand, get_opcode, set_opcode) = {
-            if let Some((arg, err)) = self.compiler.resolve_local(name) {
-                if err {
-                    self.error("Can't read local variable in its own initializer.");
-                }
+            if let Some(arg) = self.compiler.resolve_local(name)? {
                 (arg as u8, OpCode::GetLocal, OpCode::SetLocal)
+            } else if let Some(arg) = self.compiler.resolve_upvalue(name)? {
+                (arg as u8, OpCode::GetUpvalue, OpCode::SetUpvalue)
             } else {
                 let arg = self.identifier_constant(name);
                 (arg, OpCode::GetGlobal, OpCode::SetGlobal)
@@ -477,6 +484,7 @@ impl<'source> Parser<'source> {
         } else {
             self.emit_instruction(get_opcode, operand);
         }
+        Ok(())
     }
 
     /// Starts at the current token and parses any expression at the given precedence or higher
@@ -486,8 +494,7 @@ impl<'source> Parser<'source> {
         let prefix_rule = self.get_rule(self.previous.token_type).prefix;
         match prefix_rule {
             None => {
-                self.error("Expect expression.");
-                return;
+                return self.error_str("Expect expression.");
             }
             Some(prefix_rule) => prefix_rule(self, can_assign),
         }
@@ -500,7 +507,7 @@ impl<'source> Parser<'source> {
         }
 
         if can_assign && self.advance_matching(TokenType::Equal) {
-            self.error("Invalid assignment target.")
+            self.error_str("Invalid assignment target.")
         }
     }
 
@@ -533,7 +540,7 @@ impl<'source> Parser<'source> {
         let name = self.previous;
 
         if self.compiler.is_local_already_in_scope(name) {
-            self.error("Already a variable with this name in this scope.");
+            self.error_str("Already a variable with this name in this scope.");
         }
 
         self.add_local(name);
@@ -545,8 +552,8 @@ impl<'source> Parser<'source> {
         if !self.check(TokenType::RightParen) {
             loop {
                 self.expression();
-                if arg_count == 255 {
-                    self.error("Can't have more than 255 arguments.");
+                if arg_count == u8::MAX {
+                    self.error_str("Can't have more than 255 arguments.");
                 }
                 arg_count += 1;
 
@@ -560,8 +567,8 @@ impl<'source> Parser<'source> {
     }
 
     fn add_local(&mut self, name: Token<'source>) {
-        if self.compiler.add_local(name).is_err() {
-            self.error("Too many local variables in function.")
+        if let Err(err) = self.compiler.add_local(name) {
+            self.error(err)
         }
     }
 
@@ -652,7 +659,7 @@ impl<'source> Parser<'source> {
         let constant = self.current_chunk().add_constant(value);
         if constant > u8::MAX.into() {
             // TODO we'd want to add another instruction like OpCode::Constant16 which stores the index as a two-byte operand when this limit is hit
-            self.error("To many constants in one chunk.");
+            self.error_str("Too many constants in one chunk.");
             return 0;
         }
         constant.try_into().unwrap()
@@ -670,7 +677,7 @@ impl<'source> Parser<'source> {
         let jump = self.current_chunk().code.len() - offset - 2;
 
         if jump > u16::MAX as usize {
-            self.error("Too much code to jump over.");
+            self.error_str("Too much code to jump over.");
         }
 
         let (byte1, byte2) = to_bytes(jump as u16);
@@ -684,7 +691,7 @@ impl<'source> Parser<'source> {
         // +2: take into account the size of the 2-byte Loop operand
         let offset = self.current_chunk().code.len() - loop_start + 2;
         if offset > u16::MAX as usize {
-            self.error("Loop body too large");
+            self.error_str("Loop body too large");
         }
 
         let (byte1, byte2) = to_bytes(offset as u16);
@@ -696,8 +703,15 @@ impl<'source> Parser<'source> {
         self.error_at(self.current, message)
     }
 
-    fn error(&mut self, message: &str) {
+    fn error_str(&mut self, message: &str) {
         self.error_at(self.previous, message);
+    }
+
+    fn error(&mut self, error: LoxError) {
+        match error {
+            LoxError::CompileErrorMsg(message) => self.error_at(self.previous, message),
+            _ => {}
+        }
     }
 
     fn error_at(&mut self, token: Token, message: &str) {
