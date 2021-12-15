@@ -66,7 +66,7 @@ impl<'source> Compiler<'source> {
 
     pub fn add_local(&mut self, name: Token<'source>) -> Result<()> {
         if self.local_count == Self::MAX_LOCAL_COUNT {
-            return Err(LoxError::CompileErrorMsg(
+            return Err(LoxError::CompileError(
                 "Too many local variables in function.",
             ));
         }
@@ -93,7 +93,7 @@ impl<'source> Compiler<'source> {
         }
 
         if self.function.upvalue_count == Self::MAX_UPVALUE_COUNT {
-            return Err(LoxError::CompileErrorMsg(
+            return Err(LoxError::CompileError(
                 "Too many closure variables in function.",
             ));
         }
@@ -124,7 +124,7 @@ impl<'source> Compiler<'source> {
             let local = &self.locals[i];
             if name.lexeme == local.name.lexeme {
                 return if local.depth.is_none() {
-                    Err(LoxError::CompileErrorMsg(
+                    Err(LoxError::CompileError(
                         "Can't read local variable in its own initializer.",
                     ))
                 } else {

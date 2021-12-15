@@ -28,7 +28,7 @@ pub fn compile(source: &str, gc: &mut Gc) -> Result<GcRef<Function>> {
     let function = parser.pop_compiler().function;
 
     if parser.had_error {
-        Err(LoxError::CompileError)
+        Err(LoxError::CompileError("Parser error."))
     } else {
         Ok(gc.alloc(function))
     }
@@ -715,9 +715,8 @@ impl<'source> Parser<'source> {
     }
 
     fn error(&mut self, error: LoxError) {
-        match error {
-            LoxError::CompileErrorMsg(message) => self.error_at(self.previous, message),
-            _ => {}
+        if let LoxError::CompileError(message) = error {
+            self.error_at(self.previous, message)
         }
     }
 
