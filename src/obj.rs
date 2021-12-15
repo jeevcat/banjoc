@@ -131,6 +131,8 @@ pub struct Upvalue {
     pub header: ObjHeader,
     /// Index of the closed-over variable in the locals stack
     pub location: usize,
+    pub closed: Option<Value>,
+    pub next: Option<GcRef<Upvalue>>,
 }
 
 impl Upvalue {
@@ -138,6 +140,8 @@ impl Upvalue {
         Self {
             header: ObjHeader::new(),
             location,
+            closed: None,
+            next: None,
         }
     }
 }

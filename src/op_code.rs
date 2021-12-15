@@ -45,4 +45,5 @@ pub enum OpCode {
 
     Call,
     Closure,
+    CloseUpvalue,
 }

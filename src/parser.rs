@@ -628,7 +628,11 @@ impl<'source> Parser<'source> {
     fn end_scope(&mut self) {
         // Discard locally declared variables
         while self.compiler.has_local_in_scope() {
-            self.emit_opcode(OpCode::Pop);
+            if self.compiler.get_local().is_captured {
+                self.emit_opcode(OpCode::CloseUpvalue);
+            } else {
+                self.emit_opcode(OpCode::Pop);
+            }
             self.compiler.remove_local();
         }
         self.compiler.end_scope();

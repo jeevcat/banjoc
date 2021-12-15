@@ -77,6 +77,7 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> usize {
             }
             OpCode::GetUpvalue => byte_instruction("OP_GET_UPVALUE", chunk, offset),
             OpCode::SetUpvalue => byte_instruction("OP_SET_UPVALUE", chunk, offset),
+            OpCode::CloseUpvalue => simple_instruction("OP_CLOSE_UPVALUE", offset),
         },
         Err(_) => {
             println!("Unknown opcode {}", byte);

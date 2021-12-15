@@ -46,13 +46,13 @@ where
         }
     }
 
-    /// Pop all of the values from a given index, INCLUSIVE
+    /// Pop all of the values until stack is given length
     /// e.g. stack: 0,1,2,3
-    /// stack.pop_all_from(2) -> stack: 0,1
-    pub fn pop_all_from(&mut self, index: usize) {
-        debug_assert!(index <= N);
-        debug_assert!(index <= self.index);
-        self.index = index;
+    /// stack.truncate(2) -> stack: 0,1
+    pub fn truncate(&mut self, length: usize) {
+        debug_assert!(length <= N);
+        debug_assert!(length <= self.index);
+        self.index = length;
     }
 
     pub fn peek(&self, distance: usize) -> &T {

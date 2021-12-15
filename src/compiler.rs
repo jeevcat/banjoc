@@ -35,6 +35,7 @@ impl<'source> Compiler<'source> {
         const INIT_LOCAL: Local = Local {
             name: Token::none(),
             depth: None,
+            is_captured: false,
         };
         const INIT_UPVALUE: Upvalue = Upvalue {
             index: 255,
@@ -74,6 +75,7 @@ impl<'source> Compiler<'source> {
         local.name = name;
         // Only "declare" for now, by assigning sentinel value
         local.depth = None;
+        local.is_captured = false;
 
         self.local_count += 1;
 
@@ -136,6 +138,7 @@ impl<'source> Compiler<'source> {
     pub fn resolve_upvalue(&mut self, name: Token) -> Result<Option<usize>> {
         Ok(if let Some(enclosing) = self.enclosing.as_mut() {
             if let Some(local) = enclosing.resolve_local(name)? {
+                enclosing.locals[local].is_captured = true;
                 Some(self.add_upvalue(local as u8, true)?)
             } else if let Some(upvalue) = enclosing.resolve_upvalue(name)? {
                 Some(self.add_upvalue(upvalue as u8, false)?)
@@ -145,6 +148,10 @@ impl<'source> Compiler<'source> {
         } else {
             None
         })
+    }
+
+    pub fn get_local(&self) -> &Local {
+        &self.locals[self.local_count - 1]
     }
 
     /// Is the current scope a non-global scope?
@@ -157,7 +164,7 @@ impl<'source> Compiler<'source> {
         if self.local_count == 0 {
             return false;
         }
-        if let Some(depth) = self.locals[self.local_count - 1].depth {
+        if let Some(depth) = self.get_local().depth {
             depth >= self.scope_depth
         } else {
             false
@@ -182,11 +189,12 @@ impl<'source> Compiler<'source> {
     }
 }
 
-struct Local<'source> {
+pub struct Local<'source> {
     name: Token<'source>,
     /// The scope depth of the block where the local variable was declared
     /// None means declared but not defined
     depth: Option<u32>,
+    pub is_captured: bool,
 }
 
 #[derive(Debug)]

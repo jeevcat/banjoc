@@ -19,6 +19,7 @@ pub struct Vm {
     frames: Stack<CallFrame, { Vm::FRAMES_MAX }>,
     globals: Table,
     gc: Gc,
+    open_upvalues: Option<GcRef<Upvalue>>,
 }
 
 impl Vm {
@@ -31,6 +32,7 @@ impl Vm {
             frames: Stack::new(),
             globals: Table::new(),
             gc: Gc::new(),
+            open_upvalues: None,
         };
 
         vm.define_native("clock", |_| {
@@ -115,11 +117,12 @@ impl Vm {
                     OpCode::Return => {
                         let result = self.stack.pop();
                         let fun_stack_start = self.frames.pop().slot;
+                        self.close_upvalues(fun_stack_start);
                         if self.frames.len() == 0 {
                             // Exit interpreter
                             return Ok(());
                         }
-                        self.stack.pop_all_from(fun_stack_start);
+                        self.stack.truncate(fun_stack_start);
                         self.stack.push(result);
                     }
                     OpCode::Subtract => self.binary_op(|a, b| Value::Number(a - b))?,
@@ -244,14 +247,26 @@ impl Vm {
                     OpCode::GetUpvalue => {
                         let slot = self.current_frame().read_byte() as usize;
                         let upvalue = self.current_frame().closure.upvalues[slot];
-                        let value = *self.stack.read(upvalue.location);
+                        let value = if let Some(closed) = upvalue.closed {
+                            closed
+                        } else {
+                            *self.stack.read(upvalue.location)
+                        };
                         self.stack.push(value);
                     }
                     OpCode::SetUpvalue => {
                         let slot = self.current_frame().read_byte() as usize;
-                        let upvalue = self.current_frame().closure.upvalues[slot];
+                        let mut upvalue = self.current_frame().closure.upvalues[slot];
                         let value = *self.stack.peek(0);
-                        self.stack.write(upvalue.location, value);
+                        if upvalue.closed.is_some() {
+                            upvalue.closed = Some(value);
+                        } else {
+                            self.stack.write(upvalue.location, value);
+                        }
+                    }
+                    OpCode::CloseUpvalue => {
+                        self.close_upvalues(self.stack.get_offset());
+                        self.stack.pop();
                     }
                 }
             }
@@ -287,7 +302,10 @@ impl Vm {
                 Ok(())
             }
             Value::Closure(callee) => self.call(callee, arg_count),
-            _ => self.runtime_error("Can only call functions and classes."),
+            _ => self.runtime_error(&format!(
+                "Can only call functions and classes, not on '{}'.",
+                callee
+            )),
         }
     }
 
@@ -314,8 +332,44 @@ impl Vm {
     }
 
     fn capture_upvalue(&mut self, local: usize) -> GcRef<Upvalue> {
-        let upvalue = Upvalue::new(local);
-        self.gc.alloc(upvalue)
+        let mut prev_upvalue = None;
+        let mut upvalue = self.open_upvalues;
+        while let Some(inner) = upvalue {
+            if inner.location <= local {
+                break;
+            }
+            prev_upvalue = upvalue;
+            upvalue = inner.next;
+        }
+
+        // We found an existing upvalue capturing the variable, so we reuse that upvalue
+        if let Some(upvalue) = upvalue {
+            if upvalue.location == local {
+                return upvalue;
+            }
+        }
+
+        let created_upvalue = Upvalue::new(local);
+        let created_upvalue = self.gc.alloc(created_upvalue);
+
+        // Insert new upvalue between 'prev_upvalue' and 'upvalue'
+        if let Some(mut prev_upvalue) = prev_upvalue {
+            prev_upvalue.next = Some(created_upvalue);
+        } else {
+            self.open_upvalues = Some(created_upvalue);
+        }
+
+        created_upvalue
+    }
+
+    fn close_upvalues(&mut self, last: usize) {
+        while let Some(mut upvalue) = self.open_upvalues {
+            if upvalue.location < last {
+                break;
+            }
+            upvalue.closed = Some(*self.stack.read(upvalue.location));
+            self.open_upvalues = upvalue.next;
+        }
     }
 
     fn runtime_error(&self, message: &str) -> Result<()> {
