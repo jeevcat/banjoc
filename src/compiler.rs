@@ -1,7 +1,7 @@
 use crate::{
     error::{LoxError, Result},
     gc::GcRef,
-    obj::{Function, LoxString },
+    obj::{Function, LoxString},
     scanner::Token,
 };
 
@@ -20,9 +20,9 @@ pub struct Compiler<'source> {
     /// Keeps track of which stack slots are associated with which local variables or temporaries
     // TODO this can be a Stack
     locals: [Local<'source>; Compiler::MAX_LOCAL_COUNT],
-    pub upvalues: [Upvalue; Compiler::MAX_UPVALUE_COUNT],
     /// How many locals are currently in scope
     local_count: usize,
+    pub upvalues: [Upvalue; Compiler::MAX_UPVALUE_COUNT],
     /// The number of blocks surrounding the current bit of code
     scope_depth: u32,
 }
@@ -36,9 +36,8 @@ impl<'source> Compiler<'source> {
             name: Token::none(),
             depth: None,
         };
-        const INIT_UPVALUE: Upvalue = 
-        Upvalue {
-            index: 0,
+        const INIT_UPVALUE: Upvalue = Upvalue {
+            index: 255,
             is_local: false,
         };
 
@@ -91,17 +90,18 @@ impl<'source> Compiler<'source> {
             }
         }
 
-        if self.upvalues.len() == Self::MAX_UPVALUE_COUNT {
+        if self.function.upvalue_count == Self::MAX_UPVALUE_COUNT {
             return Err(LoxError::CompileErrorMsg(
                 "Too many closure variables in function.",
             ));
         }
 
-        let upvalue = &mut self.upvalues[self.function.upvalue_count];
+        let upvalue_index = self.function.upvalue_count;
+        let upvalue = &mut self.upvalues[upvalue_index];
         upvalue.index = index;
         upvalue.is_local = is_local;
-        self.function.upvalue_count +=1;
-        Ok(self.function.upvalue_count)
+        self.function.upvalue_count += 1;
+        Ok(upvalue_index)
     }
 
     pub fn mark_var_initialized(&mut self) {
@@ -189,7 +189,8 @@ struct Local<'source> {
     depth: Option<u32>,
 }
 
-struct Upvalue {
+#[derive(Debug)]
+pub struct Upvalue {
     pub index: u8,
     pub is_local: bool,
 }

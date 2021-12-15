@@ -107,12 +107,15 @@ impl Display for NativeFunction {
 pub struct Closure {
     pub header: ObjHeader,
     pub function: GcRef<Function>,
+    pub upvalues: Vec<GcRef<Upvalue>>,
 }
 
 impl Closure {
     pub fn new(function: GcRef<Function>) -> Self {
+        let upvalues = Vec::with_capacity(function.upvalue_count);
         Self {
             header: ObjHeader::new(),
+            upvalues,
             function,
         }
     }
@@ -121,5 +124,26 @@ impl Closure {
 impl Display for Closure {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&*self.function, f)
+    }
+}
+
+pub struct Upvalue {
+    pub header: ObjHeader,
+    /// Index of the closed-over variable in the locals stack
+    pub location: usize,
+}
+
+impl Upvalue {
+    pub fn new(location: usize) -> Self {
+        Self {
+            header: ObjHeader::new(),
+            location,
+        }
+    }
+}
+
+impl Display for Upvalue {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str("upvalue")
     }
 }

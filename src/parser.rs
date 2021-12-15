@@ -25,7 +25,7 @@ pub fn compile(source: &str, gc: &mut Gc) -> Result<GcRef<Function>> {
         parser.declaration();
     }
 
-    let function = parser.pop_compiler();
+    let function = parser.pop_compiler().function;
 
     if parser.had_error {
         Err(LoxError::CompileError)
@@ -136,15 +136,18 @@ impl<'source> Parser<'source> {
         self.consume(TokenType::LeftBrace, "Expect '{' before function body.");
         self.block();
 
-        let function = self.pop_compiler();
+        let Compiler {
+            function, upvalues, ..
+        } = self.pop_compiler();
         let upvalue_count = function.upvalue_count;
         let value = Value::Function(self.gc.alloc(function));
+
         let constant = self.make_constant(value);
         self.emit_instruction(OpCode::Closure, constant);
 
-        for i in 0..upvalue_count {
-            self.emit_byte(if self.compiler.upvalues[i].is_local { 1 } else { 0 });
-            self.emit_byte(self.compiler.upvalues[i].index);
+        for upvalue in upvalues.iter().take(upvalue_count) {
+            self.emit_byte(upvalue.is_local as u8);
+            self.emit_byte(upvalue.index);
         }
     }
 
@@ -588,7 +591,7 @@ impl<'source> Parser<'source> {
         self.compiler.enclosing = Some(old_compiler);
     }
 
-    fn pop_compiler(&mut self) -> Function {
+    fn pop_compiler(&mut self) -> Compiler {
         self.emit_return();
 
         #[cfg(feature = "debug_trace_execution")]
@@ -607,14 +610,14 @@ impl<'source> Parser<'source> {
 
         if let Some(enclosing) = self.compiler.enclosing.take() {
             let compiler = mem::replace(&mut self.compiler, enclosing);
-            compiler.function
+            *compiler
         } else {
             // TODO no need to put a random object into self.compiler
             let compiler = mem::replace(
                 &mut self.compiler,
                 Box::new(Compiler::new(FunctionType::Script, None)),
             );
-            compiler.function
+            *compiler
         }
     }
 

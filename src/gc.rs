@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    obj::{hash_string, Closure, Function, LoxString, NativeFunction},
+    obj::{hash_string, Closure, Function, LoxString, NativeFunction, Upvalue},
     table::Table,
     value::Value,
 };
@@ -75,6 +75,7 @@ pub enum Obj {
     Function(GcRef<Function>),
     NativeFunction(GcRef<NativeFunction>),
     Closure(GcRef<Closure>),
+    Upvalue(GcRef<Upvalue>),
 }
 
 impl Obj {
@@ -85,6 +86,7 @@ impl Obj {
             Obj::Function(x) => &mut x.header,
             Obj::NativeFunction(x) => &mut x.header,
             Obj::Closure(x) => &mut x.header,
+            Obj::Upvalue(x) => &mut x.header,
         }
     }
 
@@ -94,6 +96,7 @@ impl Obj {
             Obj::Function(x) => x.drop_ptr(),
             Obj::NativeFunction(x) => x.drop_ptr(),
             Obj::Closure(x) => x.drop_ptr(),
+            Obj::Upvalue(x) => x.drop_ptr(),
         }
     }
 
@@ -112,6 +115,7 @@ impl Display for Obj {
             Obj::Function(x) => x.fmt(f),
             Obj::NativeFunction(x) => x.fmt(f),
             Obj::Closure(x) => x.fmt(f),
+            Obj::Upvalue(x) => x.fmt(f),
         }
     }
 }
@@ -155,6 +159,15 @@ impl MakeObj for Closure {
         Self: Sized,
     {
         Obj::Closure(gc_ref)
+    }
+}
+
+impl MakeObj for Upvalue {
+    fn make_obj(gc_ref: GcRef<Self>) -> Obj
+    where
+        Self: Sized,
+    {
+        Obj::Upvalue(gc_ref)
     }
 }
 

@@ -6,7 +6,7 @@ use std::{
 use crate::{
     error::{LoxError, Result},
     gc::{Gc, GcRef},
-    obj::{Closure, NativeFn, NativeFunction},
+    obj::{Closure, NativeFn, NativeFunction, Upvalue},
     parser,
     stack::Stack,
     table::Table,
@@ -215,15 +215,43 @@ impl Vm {
                         self.call_value(*self.stack.peek(arg_count), arg_count)?;
                     }
                     OpCode::Closure => {
+                        // Load the compiled function from the constant table
                         let function = self.current_frame().read_constant();
-                        match function {
-                            Value::Function(function) => {
-                                let closure = Closure::new(function);
-                                let closure = self.gc.alloc(closure);
-                                self.stack.push(Value::Closure(closure));
+                        if let Value::Function(function) = function {
+                            // Wrap that function in a new closure object and push it onto the stack
+                            let closure = Closure::new(function);
+                            let mut closure = self.gc.alloc(closure);
+                            self.stack.push(Value::Closure(closure));
+
+                            // Iterate over each upvalue the closure expects
+                            for _ in 0..function.upvalue_count {
+                                let is_local = self.current_frame().read_byte() != 0;
+                                let index = self.current_frame().read_byte() as usize;
+                                let upvalue = if is_local {
+                                    // If the upvalue closes over a local variable in the immediately enclosing function, we can directly capture it
+                                    let location = self.current_frame().slot + index;
+                                    self.capture_upvalue(location)
+                                } else {
+                                    // Otherwise we capture the *upvalue* from the immediately enclosing function
+                                    self.current_frame().closure.upvalues[index]
+                                };
+                                closure.upvalues.push(upvalue);
                             }
-                            _ => unreachable!(),
+                        } else {
+                            unreachable!()
                         }
+                    }
+                    OpCode::GetUpvalue => {
+                        let slot = self.current_frame().read_byte() as usize;
+                        let upvalue = self.current_frame().closure.upvalues[slot];
+                        let value = *self.stack.read(upvalue.location);
+                        self.stack.push(value);
+                    }
+                    OpCode::SetUpvalue => {
+                        let slot = self.current_frame().read_byte() as usize;
+                        let upvalue = self.current_frame().closure.upvalues[slot];
+                        let value = *self.stack.peek(0);
+                        self.stack.write(upvalue.location, value);
                     }
                 }
             }
@@ -283,6 +311,11 @@ impl Vm {
         };
         self.frames.push(CallFrame::new(callee, slot));
         Ok(())
+    }
+
+    fn capture_upvalue(&mut self, local: usize) -> GcRef<Upvalue> {
+        let upvalue = Upvalue::new(local);
+        self.gc.alloc(upvalue)
     }
 
     fn runtime_error(&self, message: &str) -> Result<()> {
@@ -358,6 +391,7 @@ impl CallFrame {
         let index: usize = self.read_byte().try_into().unwrap();
         self.closure.function.chunk.constants[index]
     }
+
     fn read_local_offset(&mut self) -> usize {
         let offset = self.read_byte() as usize;
         self.slot + offset
