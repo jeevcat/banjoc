@@ -108,10 +108,10 @@ impl Table {
     }
 
     pub fn remove_white(&mut self) {
-        for i in 0..self.count {
+        for i in 0..self.capacity() {
             let entry = &self.entries[i];
             if let Some(key) = entry.key {
-                if key.is_marked() {
+                if !key.is_marked() {
                     self.remove(key);
                 }
             }
@@ -221,12 +221,11 @@ fn find_entry_mut(entries: &mut [Entry], key: GcRef<LoxString>) -> &mut Entry {
 
 impl GarbageCollect for Table {
     fn mark(&mut self, gc: &mut Gc) {
-        dbg!(self.count);
-        for i in 0..self.count {
-            dbg!(self.entries[i].key);
-            dbg!(self.entries[i].value);
-            self.entries[i].key.unwrap().mark(gc);
-            self.entries[i].value.mark(gc)
+        for entry in &mut self.entries {
+            if let Some(mut key) = entry.key {
+                key.mark(gc);
+                entry.value.mark(gc)
+            }
         }
     }
 }

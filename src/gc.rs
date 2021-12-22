@@ -172,6 +172,16 @@ impl Obj {
         }
     }
 
+    pub fn size_of_val(&self) -> usize {
+        match self {
+            Obj::String(x) => mem::size_of_val(x.deref()),
+            Obj::Function(x) => mem::size_of_val(x.deref()),
+            Obj::NativeFunction(x) => mem::size_of_val(x.deref()),
+            Obj::Closure(x) => mem::size_of_val(x.deref()),
+            Obj::Upvalue(x) => mem::size_of_val(x.deref()),
+        }
+    }
+
     fn make<T>(gc_ref: GcRef<T>) -> Self
     where
         T: MakeObj,
@@ -305,10 +315,6 @@ impl Gc {
     where
         T: MakeObj + Display,
     {
-        self.bytes_allocated += mem::size_of_val(&object);
-        if self.bytes_allocated > self.next_gc {
-            self.collect_garbage();
-        }
         // TODO https://users.rust-lang.org/t/how-to-create-large-objects-directly-in-heap/26405
 
         // Move the passed in object to new space allocated on the heap
@@ -338,6 +344,11 @@ impl Gc {
             );
         }
 
+        self.bytes_allocated += obj.size_of_val();
+        if self.bytes_allocated > self.next_gc {
+            // self.collect_garbage();
+        }
+
         pointer
     }
 
@@ -351,7 +362,9 @@ impl Gc {
         self.strings.remove_white();
         self.sweep();
 
-        self.next_gc = self.bytes_allocated * Self::HEAP_GROW_FACTOR;
+        if self.bytes_allocated > 0 {
+            self.next_gc = self.bytes_allocated * Self::HEAP_GROW_FACTOR;
+        }
 
         #[cfg(feature = "debug_log_gc")]
         {
@@ -373,6 +386,7 @@ impl Gc {
     }
 
     fn blacken_object(&mut self, obj: Obj) {
+        // A black object is any object who is marked and is no longer in the gray stack
         #[cfg(feature = "debug_log_gc")]
         {
             println!("blacken {}", obj);
@@ -430,21 +444,9 @@ impl Gc {
                 }
 
                 println!("Dropping {}", obj);
-                self.bytes_allocated -= mem::size_of_val(&unreached);
+                self.bytes_allocated -= obj.size_of_val();
                 unreached.drop_inner();
             }
-        }
-    }
-}
-
-impl Drop for Gc {
-    fn drop(&mut self) {
-        let mut obj = self.first.take();
-        while let Some(mut next) = obj {
-            println!("Dropping: {}", next);
-            let maybe_next = next.header().next;
-            next.drop_inner();
-            obj = maybe_next;
         }
     }
 }

@@ -1,6 +1,7 @@
 use std::{
+    fmt::Display,
     mem::{self, MaybeUninit},
-    ops::Index, fmt::Display,
+    ops::Index,
 };
 
 use strum::{EnumCount, IntoEnumIterator};
@@ -9,16 +10,17 @@ use crate::{
     chunk::Chunk,
     compiler::{Compiler, FunctionType},
     error::{LoxError, Result},
-    gc::{Gc, GcRef, GarbageCollect, MakeObj},
+    gc::{GarbageCollect, GcRef, MakeObj},
     obj::{Function, LoxString},
     op_code::OpCode,
     scanner::{Scanner, Token, TokenType},
     value::Value,
+    vm::Vm,
 };
 
-pub fn compile(source: &str, gc: &mut Gc) -> Result<GcRef<Function>> {
+pub fn compile(source: &str, vm: &mut Vm) -> Result<GcRef<Function>> {
     let scanner = Scanner::new(source);
-    let mut parser = Parser::new(scanner, gc);
+    let mut parser = Parser::new(scanner, vm);
 
     parser.advance();
     while !parser.advance_matching(TokenType::Eof) {
@@ -30,6 +32,7 @@ pub fn compile(source: &str, gc: &mut Gc) -> Result<GcRef<Function>> {
     if parser.had_error {
         Err(LoxError::CompileError("Parser error."))
     } else {
+        println!("Alloc {}", function);
         Ok(parser.alloc(function))
     }
 }
@@ -39,14 +42,14 @@ struct Parser<'source> {
     compiler: Box<Compiler<'source>>,
     current: Token<'source>,
     previous: Token<'source>,
-    gc: &'source mut Gc,
+    vm: &'source mut Vm,
     had_error: bool,
     panic_mode: bool,
     rules: ParseRuleTable<'source>,
 }
 
 impl<'source> Parser<'source> {
-    fn new(scanner: Scanner<'source>, gc: &'source mut Gc) -> Parser<'source> {
+    fn new(scanner: Scanner<'source>, vm: &'source mut Vm) -> Parser<'source> {
         let rules = ParseRuleTable::new();
 
         Self {
@@ -54,7 +57,7 @@ impl<'source> Parser<'source> {
             compiler: Box::new(Compiler::new(FunctionType::Script, None)),
             current: Token::none(),
             previous: Token::none(),
-            gc,
+            vm,
             had_error: false,
             panic_mode: false,
             rules,
@@ -737,7 +740,7 @@ impl<'source> Parser<'source> {
     }
 
     pub fn intern(&mut self, string: String) -> GcRef<LoxString> {
-        self.gc.intern(string)
+        self.vm.gc.intern(string)
     }
 
     /// Move the provided object to the heap and track with the garbage collector
@@ -748,18 +751,19 @@ impl<'source> Parser<'source> {
         #[cfg(feature = "debug_stress_gc")]
         {
             // TODO is this truly often enough?
-            self.mark_roots();
             println!("Start compiler gc");
-            self.gc.collect_garbage();
+            self.mark_roots();
+            self.vm.gc.collect_garbage();
         }
 
-        self.gc.alloc(object)
+        self.vm.gc.alloc(object)
     }
 
     fn mark_roots(&mut self) {
+        self.vm.mark_roots();
         let mut compiler = Some(&mut self.compiler);
         while let Some(inner) = compiler {
-            inner.function.mark(self.gc);
+            inner.function.mark(&mut self.vm.gc);
             compiler = inner.enclosing.as_mut();
         }
     }

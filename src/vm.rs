@@ -17,10 +17,10 @@ use crate::{op_code::OpCode, value::Value};
 
 pub type ValueStack = Stack<Value, { Vm::STACK_MAX }>;
 pub struct Vm {
+    pub gc: Gc,
     stack: ValueStack,
     frames: Stack<CallFrame, { Vm::FRAMES_MAX }>,
     globals: Table,
-    gc: Gc,
     open_upvalues: Option<GcRef<Upvalue>>,
 }
 
@@ -30,10 +30,10 @@ impl Vm {
 
     pub fn new() -> Vm {
         let mut vm = Vm {
+            gc: Gc::new(),
             stack: Stack::new(),
             frames: Stack::new(),
             globals: Table::new(),
-            gc: Gc::new(),
             open_upvalues: None,
         };
 
@@ -51,7 +51,7 @@ impl Vm {
 
     pub fn interpret(&mut self, source: &str) -> Result<()> {
         // All this stack pushing and popping is to keep the carbage collector happy?
-        let function = parser::compile(source, &mut self.gc)?;
+        let function = parser::compile(source, self)?;
         self.stack.push(Value::Function(function));
         let closure = Closure::new(function);
         self.stack.pop();
@@ -390,6 +390,7 @@ impl Vm {
         self.globals.insert(ls, *self.stack.peek(0));
         self.stack.pop();
         self.stack.pop();
+        println!("Defined native fn {}", name);
     }
 
     pub fn intern(&mut self, string: String) -> GcRef<LoxString> {
@@ -404,15 +405,15 @@ impl Vm {
         #[cfg(feature = "debug_stress_gc")]
         {
             // TODO is this truly often enough?
-            self.mark_roots();
             println!("Start vm gc");
+            self.mark_roots();
             self.gc.collect_garbage();
         }
 
         self.gc.alloc(object)
     }
 
-    fn mark_roots(&mut self) {
+    pub fn mark_roots(&mut self) {
         // Stack
         self.stack.mark(&mut self.gc);
 
@@ -427,6 +428,7 @@ impl Vm {
         }
 
         // Globals
+        println!("Marking globals");
         self.globals.mark(&mut self.gc);
     }
 }
