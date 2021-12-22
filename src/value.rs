@@ -1,7 +1,11 @@
+use std::fmt::Debug;
 use std::fmt::Display;
+use std::fmt::Formatter;
+use std::fmt;
+use std::ops::Deref;
 
 use crate::{
-    gc::GcRef,
+    gc::{GarbageCollect, GcRef, Gc},
     obj::{Closure, Function, LoxString, NativeFunction},
 };
 
@@ -27,20 +31,6 @@ impl Value {
     }
 }
 
-impl Display for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Value::Bool(x) => x.fmt(f),
-            Value::Nil => f.write_str("nil"),
-            Value::Number(x) => x.fmt(f),
-            Value::String(x) => x.fmt(f),
-            Value::Function(x) => x.fmt(f),
-            Value::NativeFunction(x) => x.fmt(f),
-            Value::Closure(x) => x.fmt(f),
-        }
-    }
-}
-
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -56,8 +46,40 @@ impl PartialEq for Value {
     }
 }
 
+impl Display for Value {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Value::Bool(x) => Display::fmt(&x, f),
+            Value::Nil => f.write_str("nil"),
+            Value::Number(x) => Display::fmt(&x, f),
+            Value::String(x) => Display::fmt(x.deref(), f),
+            Value::Function(x) => Display::fmt(x.deref(), f),
+            Value::NativeFunction(x) => Display::fmt(x.deref(), f),
+            Value::Closure(x) => Display::fmt(x.deref(), f),
+        }
+    }
+}
+
+impl Debug for Value {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(self, f)
+    }
+}
+
 impl Default for Value {
     fn default() -> Self {
         Self::Nil
+    }
+}
+
+impl GarbageCollect for Value {
+    fn mark(&mut self, gc: &mut Gc) {
+        match self {
+            Value::String(x) => x.mark(gc),
+            Value::Function(x) => x.mark(gc),
+            Value::NativeFunction(x) => x.mark(gc),
+            Value::Closure(x) => x.mark(gc),
+            _ => {}
+        }
     }
 }

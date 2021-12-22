@@ -1,6 +1,7 @@
 use std::{
-    fmt::Display,
+    fmt::{Debug, Display},
     marker::Sized,
+    mem,
     ops::{Deref, DerefMut},
     ptr::NonNull,
 };
@@ -11,13 +12,20 @@ use crate::{
     value::Value,
 };
 
+// TODO Currently we use the following systems which all track the same structs
+// - struct GcRef<T>
+// - enum Obj
+// - trait MakeObj
+// The following tracks more than just the Object structs (can stay like this)
+// - trait GarbageCollect
+
 // Basically a NonNull but allows derefing
 // Should be passed around by value
 pub struct GcRef<T> {
     pub pointer: NonNull<T>,
 }
 
-impl<T> GcRef<T> {
+impl<T: Display> GcRef<T> {
     pub fn dangling() -> Self {
         Self {
             pointer: NonNull::dangling(),
@@ -25,6 +33,10 @@ impl<T> GcRef<T> {
     }
 
     pub fn drop_ptr(self) {
+        #[cfg(feature = "debug_log_gc")]
+        {
+            println!("{:?} free {}", self.pointer.as_ptr(), self.deref());
+        }
         unsafe { std::ptr::drop_in_place(self.pointer.as_ptr()) }
     }
 }
@@ -57,13 +69,73 @@ impl<T> PartialEq for GcRef<T> {
     }
 }
 
+impl<T: Display> Debug for GcRef<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.deref().fmt(f)
+    }
+}
+
+pub trait GarbageCollect {
+    fn mark(&mut self, gc: &mut Gc);
+}
+
+impl<T> GarbageCollect for GcRef<T>
+where
+    T: GarbageCollect + MakeObj + Display,
+{
+    fn mark(&mut self, gc: &mut Gc) {
+        if self.is_marked() {
+            return;
+        }
+        #[cfg(feature = "debug_log_gc")]
+        {
+            // TODO How can we debug information about the outer object
+        }
+        println!("Marked {}", **self);
+        self.deref_mut().mark(gc);
+        gc.gray_stack.push(Obj::make(*self));
+    }
+}
+
+impl GarbageCollect for LoxString {
+    fn mark(&mut self, _gc: &mut Gc) {
+        self.header.mark()
+    }
+}
+
+impl GarbageCollect for Function {
+    fn mark(&mut self, _gc: &mut Gc) {
+        self.header.mark()
+    }
+}
+
+impl GarbageCollect for Closure {
+    fn mark(&mut self, _gc: &mut Gc) {
+        self.header.mark()
+    }
+}
+
+impl GarbageCollect for NativeFunction {
+    fn mark(&mut self, _gc: &mut Gc) {
+        self.header.mark()
+    }
+}
+
 pub struct ObjHeader {
     next: Option<Obj>,
+    is_marked: bool,
 }
 
 impl ObjHeader {
     pub fn new() -> Self {
-        Self { next: None }
+        Self {
+            next: None,
+            is_marked: false,
+        }
+    }
+
+    pub fn mark(&mut self) {
+        self.is_marked = true;
     }
 }
 
@@ -124,6 +196,8 @@ pub trait MakeObj {
     fn make_obj(gc_ref: GcRef<Self>) -> Obj
     where
         Self: Sized;
+
+    fn is_marked(&self) -> bool;
 }
 
 impl MakeObj for LoxString {
@@ -132,6 +206,10 @@ impl MakeObj for LoxString {
         Self: Sized,
     {
         Obj::String(gc_ref)
+    }
+
+    fn is_marked(&self) -> bool {
+        self.header.is_marked
     }
 }
 
@@ -142,6 +220,10 @@ impl MakeObj for Function {
     {
         Obj::Function(gc_ref)
     }
+
+    fn is_marked(&self) -> bool {
+        self.header.is_marked
+    }
 }
 
 impl MakeObj for NativeFunction {
@@ -150,6 +232,10 @@ impl MakeObj for NativeFunction {
         Self: Sized,
     {
         Obj::NativeFunction(gc_ref)
+    }
+
+    fn is_marked(&self) -> bool {
+        self.header.is_marked
     }
 }
 
@@ -160,6 +246,10 @@ impl MakeObj for Closure {
     {
         Obj::Closure(gc_ref)
     }
+
+    fn is_marked(&self) -> bool {
+        self.header.is_marked
+    }
 }
 
 impl MakeObj for Upvalue {
@@ -169,6 +259,10 @@ impl MakeObj for Upvalue {
     {
         Obj::Upvalue(gc_ref)
     }
+
+    fn is_marked(&self) -> bool {
+        self.header.is_marked
+    }
 }
 
 pub struct Gc {
@@ -176,13 +270,21 @@ pub struct Gc {
     first: Option<Obj>,
     /// Table of interned strings
     strings: Table,
+    gray_stack: Vec<Obj>,
+    bytes_allocated: usize,
+    next_gc: usize,
 }
 
 impl Gc {
+    const HEAP_GROW_FACTOR: usize = 2;
+
     pub fn new() -> Self {
         Self {
             first: None,
             strings: Table::new(),
+            gray_stack: Vec::new(),
+            bytes_allocated: 0,
+            next_gc: 1024 * 1024,
         }
     }
 
@@ -201,8 +303,12 @@ impl Gc {
     /// Move the provided object to the heap and track with the garbage collector
     pub fn alloc<T>(&mut self, object: T) -> GcRef<T>
     where
-        T: MakeObj,
+        T: MakeObj + Display,
     {
+        self.bytes_allocated += mem::size_of_val(&object);
+        if self.bytes_allocated > self.next_gc {
+            self.collect_garbage();
+        }
         // TODO https://users.rust-lang.org/t/how-to-create-large-objects-directly-in-heap/26405
 
         // Move the passed in object to new space allocated on the heap
@@ -222,7 +328,112 @@ impl Gc {
         obj.header().next = self.first.take();
         self.first = Some(obj);
 
+        #[cfg(feature = "debug_log_gc")]
+        {
+            println!(
+                "{:?} allocate {} for {}",
+                pointer.pointer.as_ptr(),
+                mem::size_of_val(pointer.deref()),
+                pointer.deref()
+            );
+        }
+
         pointer
+    }
+
+    pub fn collect_garbage(&mut self) {
+        #[cfg(feature = "debug_log_gc")]
+        let before = self.bytes_allocated;
+        #[cfg(feature = "debug_log_gc")]
+        println!("-- gc begin");
+
+        self.trace_references();
+        self.strings.remove_white();
+        self.sweep();
+
+        self.next_gc = self.bytes_allocated * Self::HEAP_GROW_FACTOR;
+
+        #[cfg(feature = "debug_log_gc")]
+        {
+            println!("-- gc end");
+            println!(
+                "   collected {} bytes (from {} to {}) next at {}",
+                before - self.bytes_allocated,
+                before,
+                self.bytes_allocated,
+                self.next_gc
+            );
+        }
+    }
+
+    fn trace_references(&mut self) {
+        while let Some(obj) = self.gray_stack.pop() {
+            self.blacken_object(obj);
+        }
+    }
+
+    fn blacken_object(&mut self, obj: Obj) {
+        #[cfg(feature = "debug_log_gc")]
+        {
+            println!("blacken {}", obj);
+        }
+
+        // Mark all outgoing references
+        match obj {
+            Obj::String(_) => {
+                // No outgoing references
+            }
+            Obj::NativeFunction(_) => {
+                // No outgoing references
+            }
+            Obj::Upvalue(upvalue) => {
+                if let Some(mut closed) = upvalue.closed {
+                    closed.mark(self);
+                }
+            }
+            Obj::Function(mut function) => {
+                if let Some(mut name) = function.name {
+                    name.mark(self);
+                }
+                for constant in &mut function.chunk.constants {
+                    constant.mark(self);
+                }
+            }
+            Obj::Closure(mut closure) => {
+                closure.function.mark(self);
+                for i in 0..closure.upvalues.len() {
+                    closure.upvalues[i].mark(self);
+                }
+            }
+        }
+    }
+
+    fn sweep(&mut self) {
+        let mut prev = None;
+        let mut maybe_obj = self.first;
+        // Walk through the linked list of every object in the heap, checking if marked
+        while let Some(mut obj) = maybe_obj {
+            if obj.header().is_marked {
+                // Skip marked (black) objects, but unmark for next run
+                obj.header().is_marked = false;
+                prev = maybe_obj;
+                maybe_obj = obj.header().next;
+                println!("Not dropping {}", obj);
+            } else {
+                // Unlink and free unmarked (white) objects
+                let unreached = obj;
+                maybe_obj = obj.header().next;
+                if let Some(mut prev) = prev {
+                    prev.header().next = maybe_obj;
+                } else {
+                    self.first = maybe_obj;
+                }
+
+                println!("Dropping {}", obj);
+                self.bytes_allocated -= mem::size_of_val(&unreached);
+                unreached.drop_inner();
+            }
+        }
     }
 }
 

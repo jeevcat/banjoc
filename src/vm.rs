@@ -1,12 +1,13 @@
 use std::{
+    fmt::Display,
     ptr::null,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use crate::{
     error::{LoxError, Result},
-    gc::{Gc, GcRef},
-    obj::{Closure, NativeFn, NativeFunction, Upvalue},
+    gc::{GarbageCollect, Gc, GcRef, MakeObj},
+    obj::{Closure, LoxString, NativeFn, NativeFunction, Upvalue},
     parser,
     stack::Stack,
     table::Table,
@@ -14,8 +15,9 @@ use crate::{
 
 use crate::{op_code::OpCode, value::Value};
 
+pub type ValueStack = Stack<Value, { Vm::STACK_MAX }>;
 pub struct Vm {
-    stack: Stack<Value, { Vm::STACK_MAX }>,
+    stack: ValueStack,
     frames: Stack<CallFrame, { Vm::FRAMES_MAX }>,
     globals: Table,
     gc: Gc,
@@ -48,12 +50,12 @@ impl Vm {
     }
 
     pub fn interpret(&mut self, source: &str) -> Result<()> {
-        // All this stack pushing and popping is to cool the carbage collector happy?
+        // All this stack pushing and popping is to keep the carbage collector happy?
         let function = parser::compile(source, &mut self.gc)?;
         self.stack.push(Value::Function(function));
         let closure = Closure::new(function);
         self.stack.pop();
-        let closure = self.gc.alloc(closure);
+        let closure = self.alloc(closure);
         self.stack.push(Value::Closure(closure));
 
         self.call(closure, 0)?;
@@ -90,8 +92,7 @@ impl Vm {
                             (Value::String(a), Value::String(b)) => {
                                 self.stack.pop();
                                 self.stack.pop();
-                                let result =
-                                    self.gc.intern(format!("{}{}", a.as_str(), b.as_str()));
+                                let result = self.intern(format!("{}{}", a.as_str(), b.as_str()));
                                 self.stack.push(Value::String(result));
                             }
                             _ => {
@@ -223,7 +224,7 @@ impl Vm {
                         if let Value::Function(function) = function {
                             // Wrap that function in a new closure object and push it onto the stack
                             let closure = Closure::new(function);
-                            let mut closure = self.gc.alloc(closure);
+                            let mut closure = self.alloc(closure);
                             self.stack.push(Value::Closure(closure));
 
                             // Iterate over each upvalue the closure expects
@@ -247,22 +248,13 @@ impl Vm {
                     OpCode::GetUpvalue => {
                         let slot = self.current_frame().read_byte() as usize;
                         let upvalue = self.current_frame().closure.upvalues[slot];
-                        let value = if let Some(closed) = upvalue.closed {
-                            closed
-                        } else {
-                            *self.stack.read(upvalue.location)
-                        };
+                        let value = upvalue.read(&self.stack);
                         self.stack.push(value);
                     }
                     OpCode::SetUpvalue => {
                         let slot = self.current_frame().read_byte() as usize;
                         let mut upvalue = self.current_frame().closure.upvalues[slot];
-                        let value = *self.stack.peek(0);
-                        if upvalue.closed.is_some() {
-                            upvalue.closed = Some(value);
-                        } else {
-                            self.stack.write(upvalue.location, value);
-                        }
+                        upvalue.write(&mut self.stack);
                     }
                     OpCode::CloseUpvalue => {
                         self.close_upvalues(self.stack.get_offset());
@@ -350,7 +342,7 @@ impl Vm {
         }
 
         let created_upvalue = Upvalue::new(local);
-        let created_upvalue = self.gc.alloc(created_upvalue);
+        let created_upvalue = self.alloc(created_upvalue);
 
         // Insert new upvalue between 'prev_upvalue' and 'upvalue'
         if let Some(mut prev_upvalue) = prev_upvalue {
@@ -390,14 +382,52 @@ impl Vm {
 
     fn define_native(&mut self, name: &str, function: NativeFn) {
         // Pushing and popping to and from stack is only to ensure no GC occurs
-        // #TODO probably can manually mark things as roots instead?
-        let ls = self.gc.intern(name.to_string());
+        // TODO probably can manually mark things as roots instead?
+        let ls = self.intern(name.to_string());
         self.stack.push(Value::String(ls));
-        let native = self.gc.alloc(NativeFunction::new(function));
+        let native = self.alloc(NativeFunction::new(function));
         self.stack.push(Value::NativeFunction(native));
         self.globals.insert(ls, *self.stack.peek(0));
         self.stack.pop();
         self.stack.pop();
+    }
+
+    pub fn intern(&mut self, string: String) -> GcRef<LoxString> {
+        self.gc.intern(string)
+    }
+
+    /// Move the provided object to the heap and track with the garbage collector
+    pub fn alloc<T>(&mut self, object: T) -> GcRef<T>
+    where
+        T: MakeObj + Display,
+    {
+        #[cfg(feature = "debug_stress_gc")]
+        {
+            // TODO is this truly often enough?
+            self.mark_roots();
+            println!("Start vm gc");
+            self.gc.collect_garbage();
+        }
+
+        self.gc.alloc(object)
+    }
+
+    fn mark_roots(&mut self) {
+        // Stack
+        self.stack.mark(&mut self.gc);
+
+        // Call frame closures
+        self.frames.mark(&mut self.gc);
+
+        // Open upvalue list
+        let mut upvalue = self.open_upvalues;
+        while let Some(inner) = upvalue {
+            inner.read(&self.stack).mark(&mut self.gc);
+            upvalue = inner.next;
+        }
+
+        // Globals
+        self.globals.mark(&mut self.gc);
     }
 }
 
@@ -453,5 +483,11 @@ impl CallFrame {
 
     fn apply_offset(&mut self, offset: isize) {
         self.ip = unsafe { self.ip.offset(offset) };
+    }
+}
+
+impl GarbageCollect for CallFrame {
+    fn mark(&mut self, gc: &mut Gc) {
+        self.closure.mark(gc)
     }
 }

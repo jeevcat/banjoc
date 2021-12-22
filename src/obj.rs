@@ -1,9 +1,10 @@
-use std::fmt::{Debug, Display, Formatter, Write};
+use std::{fmt::{Debug, Display, Formatter, Write}, ops::Deref};
 
 use crate::{
     chunk::Chunk,
-    gc::{GcRef, ObjHeader},
+    gc::{GcRef, ObjHeader, GarbageCollect},
     value::Value,
+    vm::ValueStack,
 };
 
 pub struct LoxString {
@@ -123,7 +124,7 @@ impl Closure {
 
 impl Display for Closure {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&*self.function, f)
+        Display::fmt(self.function.deref(), f)
     }
 }
 
@@ -144,10 +145,36 @@ impl Upvalue {
             next: None,
         }
     }
+
+    pub fn read(&self, stack: &ValueStack) -> Value {
+        if let Some(closed) = self.closed {
+            closed
+        } else {
+            *stack.read(self.location)
+        }
+    }
+
+    pub fn write(&mut self, stack: &mut ValueStack) {
+        let value = *stack.peek(0);
+        if self.closed.is_some() {
+            self.closed = Some(value);
+        } else {
+            stack.write(self.location, value);
+        }
+    }
 }
 
 impl Display for Upvalue {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str("upvalue")
+    }
+}
+
+impl GarbageCollect for Upvalue {
+    fn mark(&mut self, gc: &mut crate::gc::Gc) {
+        // Only closed over values which are no longer on the stack need to be garbage collected
+        if let Some(mut closed) = self.closed {
+            closed.mark(gc);
+        }
     }
 }

@@ -1,6 +1,10 @@
 use std::{cmp::max, iter};
 
-use crate::{gc::GcRef, obj::LoxString, value::Value};
+use crate::{
+    gc::{GarbageCollect, Gc, GcRef, MakeObj},
+    obj::LoxString,
+    value::Value,
+};
 
 struct Entry {
     // The table doesn't own any of the strings used as keys. Their lifetime is the responsibility of the gc
@@ -24,6 +28,8 @@ impl Table {
     }
 
     pub fn insert(&mut self, key: GcRef<LoxString>, value: Value) -> bool {
+        dbg!(key);
+        dbg!(value);
         if self.count + 1 > (self.capacity() as f64 * Table::MAX_LOAD) as usize {
             self.grow();
         }
@@ -35,6 +41,8 @@ impl Table {
         }
         entry.key = Some(key);
         entry.value = value;
+
+        dbg!(self.count);
 
         is_new_key
     }
@@ -53,6 +61,7 @@ impl Table {
     }
 
     pub fn remove(&mut self, key: GcRef<LoxString>) -> bool {
+        println!("Remove {:?}", key);
         if self.count == 0 {
             return false;
         }
@@ -95,6 +104,17 @@ impl Table {
                 }
             }
             index = (index + 1) % self.capacity();
+        }
+    }
+
+    pub fn remove_white(&mut self) {
+        for i in 0..self.count {
+            let entry = &self.entries[i];
+            if let Some(key) = entry.key {
+                if key.is_marked() {
+                    self.remove(key);
+                }
+            }
         }
     }
 
@@ -199,6 +219,18 @@ fn find_entry_mut(entries: &mut [Entry], key: GcRef<LoxString>) -> &mut Entry {
     }
 }
 
+impl GarbageCollect for Table {
+    fn mark(&mut self, gc: &mut Gc) {
+        dbg!(self.count);
+        for i in 0..self.count {
+            dbg!(self.entries[i].key);
+            dbg!(self.entries[i].value);
+            self.entries[i].key.unwrap().mark(gc);
+            self.entries[i].value.mark(gc)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::ptr::NonNull;
@@ -215,9 +247,12 @@ mod tests {
 
         // Insert into Table
         let mut t = Table::new();
+        let mut count = 0;
         for key in &refs {
             let num = str_to_num(*key) as f64;
             t.insert(*key, Value::Number(num));
+            count += 1;
+            assert_eq!(t.count, count);
         }
 
         // Check inserted values
@@ -242,6 +277,7 @@ mod tests {
             t.insert(*key, Value::Number(num));
         }
 
+        // Remove every third entry
         for i in 0..250 {
             let index = i * 3;
             t.remove(refs[index]);

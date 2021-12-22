@@ -3,6 +3,8 @@ use std::{
     mem::MaybeUninit,
 };
 
+use crate::gc::{GarbageCollect, Gc};
+
 pub struct Stack<T, const N: usize> {
     data: [MaybeUninit<T>; N],
     /// Points just past the last used element of the stack
@@ -100,6 +102,18 @@ where
         }
         f.write_char('\n')?;
         Ok(())
+    }
+}
+
+impl<T, const N: usize> GarbageCollect for Stack<T, N>
+where
+    T: GarbageCollect,
+{
+    fn mark(&mut self, gc: &mut Gc) {
+        for index in 0..self.index {
+            let item = unsafe { self.data.get_unchecked_mut(index).assume_init_mut() };
+            item.mark(gc);
+        }
     }
 }
 
