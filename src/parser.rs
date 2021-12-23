@@ -10,7 +10,7 @@ use crate::{
     chunk::Chunk,
     compiler::{Compiler, FunctionType},
     error::{LoxError, Result},
-    gc::{GarbageCollect, GcRef},
+    gc::GcRef,
     obj::{Function, LoxString},
     op_code::OpCode,
     scanner::{Scanner, Token, TokenType},
@@ -763,7 +763,7 @@ impl<'source> Parser<'source> {
         self.vm.mark_roots();
         let mut compiler = Some(&mut self.compiler);
         while let Some(inner) = compiler {
-            inner.function.mark_gray(&mut self.vm.gc);
+            inner.function.header.mark();
             compiler = inner.enclosing.as_mut();
         }
     }

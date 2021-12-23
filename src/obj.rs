@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     chunk::Chunk,
-    gc::{GarbageCollect, Gc, GcRef, ObjHeader, ObjectType},
+    gc::{GcRef, ObjHeader, ObjectType},
     value::Value,
     vm::ValueStack,
 };
@@ -164,14 +164,5 @@ impl Upvalue {
 impl Display for Upvalue {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str("upvalue")
-    }
-}
-
-impl GarbageCollect for Upvalue {
-    fn mark_gray(&mut self, gc: &mut Gc) {
-        // Only closed over values which are no longer on the stack need to be garbage collected
-        if let Some(mut closed) = self.closed {
-            closed.mark_gray(gc);
-        }
     }
 }

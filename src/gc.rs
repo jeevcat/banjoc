@@ -18,7 +18,7 @@ use crate::{
 // The following tracks more than just the Object structs (can stay like this)
 // - trait GarbageCollect
 
-pub struct Obj(NonNull<ObjHeader>);
+struct Obj(NonNull<ObjHeader>);
 impl Obj {
     pub fn transmute<T>(&self) -> GcRef<T> {
         unsafe { mem::transmute(self.0.as_ref()) }
@@ -92,7 +92,11 @@ impl<T: Display> GcRef<T> {
         }
     }
 
-    pub fn drop_ptr(self) {
+    pub fn is_marked(&self) -> bool {
+        self.as_obj().is_marked
+    }
+
+    fn drop_ptr(self) {
         #[cfg(feature = "debug_log_gc")]
         {
             println!("{:?} free {}", self.pointer.as_ptr(), self.deref());
@@ -100,16 +104,12 @@ impl<T: Display> GcRef<T> {
         unsafe { std::ptr::drop_in_place(self.pointer.as_ptr()) }
     }
 
-    pub fn as_obj(&self) -> Obj {
+    fn as_obj(&self) -> Obj {
         unsafe { mem::transmute(self.deref()) }
     }
 
-    pub fn size_of_val(&self) -> usize {
+    fn size_of_val(&self) -> usize {
         mem::size_of_val(self.deref())
-    }
-
-    pub fn is_marked(&self) -> bool {
-        self.as_obj().is_marked
     }
 }
 
@@ -153,7 +153,7 @@ pub trait GarbageCollect {
 
 impl<T> GarbageCollect for GcRef<T>
 where
-    T: GarbageCollect + Display,
+    T: Display,
 {
     fn mark_gray(&mut self, gc: &mut Gc) {
         if self.is_marked() {
@@ -164,32 +164,8 @@ where
             // TODO How can we debug information about the outer object
         }
         println!("Marked {}", **self);
-        self.deref_mut().mark_gray(gc);
+        self.as_obj().mark();
         gc.gray_stack.push(self.as_obj());
-    }
-}
-
-impl GarbageCollect for LoxString {
-    fn mark_gray(&mut self, _gc: &mut Gc) {
-        self.header.mark()
-    }
-}
-
-impl GarbageCollect for Function {
-    fn mark_gray(&mut self, _gc: &mut Gc) {
-        self.header.mark()
-    }
-}
-
-impl GarbageCollect for Closure {
-    fn mark_gray(&mut self, _gc: &mut Gc) {
-        self.header.mark()
-    }
-}
-
-impl GarbageCollect for NativeFunction {
-    fn mark_gray(&mut self, _gc: &mut Gc) {
-        self.header.mark()
     }
 }
 
@@ -349,6 +325,7 @@ impl Gc {
             }
             ObjectType::Upvalue => {
                 let upvalue = obj.transmute::<Upvalue>();
+                // Only closed over values which are no longer on the stack need to be garbage collected
                 if let Some(mut closed) = upvalue.closed {
                     closed.mark_gray(self);
                 }
@@ -404,6 +381,20 @@ impl Gc {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn as_obj_transmute() {
+        let mut gc = Gc::new();
+
+        let ls1 = LoxString::new("first".to_string());
+        let ls1 = gc.alloc(ls1);
+        let obj = ls1.as_obj();
+        let ls2 = obj.transmute::<LoxString>();
+        assert_eq!((&ls1.header as *const _), (&ls2.header as *const _));
+        assert_eq!((&ls1.hash as *const _), (&ls2.hash as *const _));
+        assert_eq!(ls1.hash, ls2.hash);
+        assert_eq!(ls1.as_str(), ls2.as_str());
+    }
 
     #[test]
     fn string_header() {
