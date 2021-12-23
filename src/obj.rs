@@ -5,10 +5,22 @@ use std::{
 
 use crate::{
     chunk::Chunk,
-    gc::{GcRef, ObjHeader, ObjectType},
+    gc::{GcRef, ObjHeader},
+    table::Table,
     value::Value,
     vm::ValueStack,
 };
+
+#[derive(Clone, Copy)]
+pub enum ObjectType {
+    String,
+    Function,
+    NativeFunction,
+    Closure,
+    Upvalue,
+    Class,
+    Instance,
+}
 
 pub struct LoxString {
     pub header: ObjHeader,
@@ -183,6 +195,28 @@ impl Class {
         Self {
             header: ObjHeader::new(ObjectType::Class),
             name,
+        }
+    }
+}
+
+pub struct Instance {
+    pub header: ObjHeader,
+    pub class: GcRef<Class>,
+    pub fields: Table,
+}
+
+impl Display for Instance {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str(&format!("{} instance", self.class.name.as_str()))
+    }
+}
+
+impl Instance {
+    pub fn new(class: GcRef<Class>) -> Self {
+        Self {
+            header: ObjHeader::new(ObjectType::Instance),
+            class,
+            fields: Table::new(),
         }
     }
 }

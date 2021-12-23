@@ -7,7 +7,7 @@ use std::{
 use crate::{
     error::{LoxError, Result},
     gc::{GarbageCollect, Gc, GcRef},
-    obj::{Class, Closure, LoxString, NativeFn, NativeFunction, Upvalue},
+    obj::{Class, Closure, Instance, LoxString, NativeFn, NativeFunction, Upvalue},
     parser,
     stack::Stack,
     table::Table,
@@ -302,6 +302,11 @@ impl Vm {
                 Ok(())
             }
             Value::Closure(callee) => self.call(callee, arg_count),
+            Value::Class(class) => {
+                let instance = self.alloc(Instance::new(class));
+                self.stack.push(Value::Instance(instance));
+                Ok(())
+            }
             _ => self.runtime_error(&format!(
                 "Can only call functions and classes, not on '{}'.",
                 callee

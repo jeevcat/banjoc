@@ -6,7 +6,10 @@ use std::{
 };
 
 use crate::{
-    obj::{hash_string, Class, Closure, Function, LoxString, NativeFunction, Upvalue},
+    obj::{
+        hash_string, Class, Closure, Function, Instance, LoxString, NativeFunction, ObjectType,
+        Upvalue,
+    },
     table::Table,
     value::Value,
 };
@@ -21,6 +24,7 @@ impl HeaderPtr {
             ObjectType::Closure => mem::size_of::<Closure>(),
             ObjectType::Upvalue => mem::size_of::<Upvalue>(),
             ObjectType::Class => mem::size_of::<Class>(),
+            ObjectType::Instance => mem::size_of::<Instance>(),
         }
     }
 
@@ -37,6 +41,7 @@ impl HeaderPtr {
             ObjectType::Closure => self.transmute::<Closure>().drop_ptr(),
             ObjectType::Upvalue => self.transmute::<Upvalue>().drop_ptr(),
             ObjectType::Class => self.transmute::<Class>().drop_ptr(),
+            ObjectType::Instance => self.transmute::<Instance>().drop_ptr(),
         }
     }
 }
@@ -72,6 +77,7 @@ impl Display for HeaderPtr {
             ObjectType::Closure => self.transmute::<Closure>().fmt(f),
             ObjectType::Upvalue => self.transmute::<Upvalue>().fmt(f),
             ObjectType::Class => self.transmute::<Class>().fmt(f),
+            ObjectType::Instance => self.transmute::<Instance>().fmt(f),
         }
     }
 }
@@ -176,16 +182,6 @@ impl ObjHeader {
     pub fn mark(&mut self) {
         self.is_marked = true;
     }
-}
-
-#[derive(Clone, Copy)]
-pub enum ObjectType {
-    String,
-    Function,
-    NativeFunction,
-    Closure,
-    Upvalue,
-    Class,
 }
 
 pub struct Gc {
@@ -334,6 +330,11 @@ impl Gc {
             ObjectType::Class => {
                 let mut class = obj.transmute::<Class>();
                 class.name.mark_gray(self);
+            }
+            ObjectType::Instance => {
+                let mut instance = obj.transmute::<Instance>();
+                instance.class.mark_gray(self);
+                instance.fields.mark_gray(self);
             }
         }
     }

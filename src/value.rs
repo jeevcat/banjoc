@@ -1,13 +1,12 @@
-use std::fmt;
-use std::fmt::Debug;
-use std::fmt::Display;
-use std::fmt::Formatter;
-use std::ops::Deref;
+use std::{
+    fmt,
+    fmt::{Debug, Display, Formatter},
+    ops::Deref,
+};
 
-use crate::obj::Class;
 use crate::{
     gc::{GarbageCollect, Gc, GcRef},
-    obj::{Closure, Function, LoxString, NativeFunction},
+    obj::{Class, Closure, Function, Instance, LoxString, NativeFunction},
 };
 
 #[derive(Clone, Copy)]
@@ -21,6 +20,7 @@ pub enum Value {
     NativeFunction(GcRef<NativeFunction>),
     Closure(GcRef<Closure>),
     Class(GcRef<Class>),
+    Instance(GcRef<Instance>),
 }
 
 impl Value {
@@ -59,6 +59,7 @@ impl Display for Value {
             Value::NativeFunction(x) => Display::fmt(x.deref(), f),
             Value::Closure(x) => Display::fmt(x.deref(), f),
             Value::Class(x) => Display::fmt(x.deref(), f),
+            Value::Instance(x) => Display::fmt(x.deref(), f),
         }
     }
 }

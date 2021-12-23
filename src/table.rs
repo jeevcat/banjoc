@@ -12,6 +12,7 @@ struct Entry {
     value: Value,
 }
 
+/// A hashmap with key: LoxString and val: Value
 pub struct Table {
     // Number of populated entries plus tombstones
     count: usize,
