@@ -311,12 +311,7 @@ impl Vm {
             return self.runtime_error("Stack overflow.");
         }
 
-        let slot = if self.frames.len() == 0 {
-            // This value will never be used
-            usize::MAX
-        } else {
-            self.stack.get_offset() - arg_count
-        };
+        let slot = self.stack.get_offset() - arg_count;
         self.frames.push(CallFrame::new(callee, slot));
         Ok(())
     }
@@ -449,7 +444,6 @@ impl Default for CallFrame {
 
 impl CallFrame {
     fn new(closure: GcRef<Closure>, slot: usize) -> Self {
-        dbg!(slot);
         Self {
             closure,
             ip: closure.function.chunk.code.as_ptr(),
@@ -475,8 +469,6 @@ impl CallFrame {
 
     fn read_local_offset(&mut self) -> usize {
         let offset = self.read_byte() as usize;
-        dbg!(self.slot);
-        dbg!(offset);
         self.slot + offset
     }
 

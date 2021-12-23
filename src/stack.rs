@@ -97,7 +97,7 @@ where
     T: Default + Display,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for index in (0..self.index).rev() {
+        for index in 0..self.index {
             f.write_str(&format!("[ {} ]", self.read(index)))?;
         }
         f.write_char('\n')?;
