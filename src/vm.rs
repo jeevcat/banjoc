@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     error::{LoxError, Result},
-    gc::{GarbageCollect, Gc, GcRef, MakeObj},
+    gc::{GarbageCollect, Gc, GcRef},
     obj::{Closure, LoxString, NativeFn, NativeFunction, Upvalue},
     parser,
     stack::Stack,
@@ -400,7 +400,7 @@ impl Vm {
     /// Move the provided object to the heap and track with the garbage collector
     pub fn alloc<T>(&mut self, object: T) -> GcRef<T>
     where
-        T: MakeObj + Display,
+        T: Display,
     {
         #[cfg(feature = "debug_stress_gc")]
         {
@@ -415,21 +415,21 @@ impl Vm {
 
     pub fn mark_roots(&mut self) {
         // Stack
-        self.stack.mark(&mut self.gc);
+        self.stack.mark_gray(&mut self.gc);
 
         // Call frame closures
-        self.frames.mark(&mut self.gc);
+        self.frames.mark_gray(&mut self.gc);
 
         // Open upvalue list
         let mut upvalue = self.open_upvalues;
         while let Some(inner) = upvalue {
-            inner.read(&self.stack).mark(&mut self.gc);
+            inner.read(&self.stack).mark_gray(&mut self.gc);
             upvalue = inner.next;
         }
 
         // Globals
         println!("Marking globals");
-        self.globals.mark(&mut self.gc);
+        self.globals.mark_gray(&mut self.gc);
     }
 }
 
@@ -489,7 +489,7 @@ impl CallFrame {
 }
 
 impl GarbageCollect for CallFrame {
-    fn mark(&mut self, gc: &mut Gc) {
-        self.closure.mark(gc)
+    fn mark_gray(&mut self, gc: &mut Gc) {
+        self.closure.mark_gray(gc)
     }
 }

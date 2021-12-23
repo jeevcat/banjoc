@@ -1,7 +1,7 @@
 use std::{cmp::max, iter};
 
 use crate::{
-    gc::{GarbageCollect, Gc, GcRef, MakeObj},
+    gc::{GarbageCollect, Gc, GcRef},
     obj::LoxString,
     value::Value,
 };
@@ -220,11 +220,11 @@ fn find_entry_mut(entries: &mut [Entry], key: GcRef<LoxString>) -> &mut Entry {
 }
 
 impl GarbageCollect for Table {
-    fn mark(&mut self, gc: &mut Gc) {
+    fn mark_gray(&mut self, gc: &mut Gc) {
         for entry in &mut self.entries {
             if let Some(mut key) = entry.key {
-                key.mark(gc);
-                entry.value.mark(gc)
+                key.mark_gray(gc);
+                entry.value.mark_gray(gc)
             }
         }
     }

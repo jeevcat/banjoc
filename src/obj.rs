@@ -1,8 +1,11 @@
-use std::{fmt::{Debug, Display, Formatter, Write}, ops::Deref};
+use std::{
+    fmt::{Display, Formatter, Write},
+    ops::Deref,
+};
 
 use crate::{
     chunk::Chunk,
-    gc::{GcRef, ObjHeader, GarbageCollect},
+    gc::{GarbageCollect, Gc, GcRef, ObjHeader, ObjectType},
     value::Value,
     vm::ValueStack,
 };
@@ -17,7 +20,7 @@ impl LoxString {
     pub fn new(string: String) -> LoxString {
         let hash = hash_string(&string);
         LoxString {
-            header: ObjHeader::new(),
+            header: ObjHeader::new(ObjectType::String),
             string,
             hash,
         }
@@ -55,7 +58,7 @@ pub struct Function {
 impl Function {
     pub fn new(name: Option<GcRef<LoxString>>) -> Self {
         Self {
-            header: ObjHeader::new(),
+            header: ObjHeader::new(ObjectType::Function),
             arity: 0,
             chunk: Chunk::new(),
             name,
@@ -77,12 +80,6 @@ impl Display for Function {
     }
 }
 
-impl Debug for Function {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(self, f)
-    }
-}
-
 pub type NativeFn = fn(args: &[Value]) -> Value;
 pub struct NativeFunction {
     pub header: ObjHeader,
@@ -92,7 +89,7 @@ pub struct NativeFunction {
 impl NativeFunction {
     pub fn new(function: NativeFn) -> Self {
         Self {
-            header: ObjHeader::new(),
+            header: ObjHeader::new(ObjectType::NativeFunction),
             function,
         }
     }
@@ -115,7 +112,7 @@ impl Closure {
     pub fn new(function: GcRef<Function>) -> Self {
         let upvalues = Vec::with_capacity(function.upvalue_count);
         Self {
-            header: ObjHeader::new(),
+            header: ObjHeader::new(ObjectType::Closure),
             upvalues,
             function,
         }
@@ -139,7 +136,7 @@ pub struct Upvalue {
 impl Upvalue {
     pub fn new(location: usize) -> Self {
         Self {
-            header: ObjHeader::new(),
+            header: ObjHeader::new(ObjectType::Upvalue),
             location,
             closed: None,
             next: None,
@@ -171,10 +168,10 @@ impl Display for Upvalue {
 }
 
 impl GarbageCollect for Upvalue {
-    fn mark(&mut self, gc: &mut crate::gc::Gc) {
+    fn mark_gray(&mut self, gc: &mut Gc) {
         // Only closed over values which are no longer on the stack need to be garbage collected
         if let Some(mut closed) = self.closed {
-            closed.mark(gc);
+            closed.mark_gray(gc);
         }
     }
 }

@@ -1,11 +1,11 @@
+use std::fmt;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
-use std::fmt;
 use std::ops::Deref;
 
 use crate::{
-    gc::{GarbageCollect, GcRef, Gc},
+    gc::{GarbageCollect, Gc, GcRef},
     obj::{Closure, Function, LoxString, NativeFunction},
 };
 
@@ -73,12 +73,12 @@ impl Default for Value {
 }
 
 impl GarbageCollect for Value {
-    fn mark(&mut self, gc: &mut Gc) {
+    fn mark_gray(&mut self, gc: &mut Gc) {
         match self {
-            Value::String(x) => x.mark(gc),
-            Value::Function(x) => x.mark(gc),
-            Value::NativeFunction(x) => x.mark(gc),
-            Value::Closure(x) => x.mark(gc),
+            Value::String(x) => x.mark_gray(gc),
+            Value::Function(x) => x.mark_gray(gc),
+            Value::NativeFunction(x) => x.mark_gray(gc),
+            Value::Closure(x) => x.mark_gray(gc),
             _ => {}
         }
     }

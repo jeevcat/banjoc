@@ -10,7 +10,7 @@ use crate::{
     chunk::Chunk,
     compiler::{Compiler, FunctionType},
     error::{LoxError, Result},
-    gc::{GarbageCollect, GcRef, MakeObj},
+    gc::{GarbageCollect, GcRef},
     obj::{Function, LoxString},
     op_code::OpCode,
     scanner::{Scanner, Token, TokenType},
@@ -746,7 +746,7 @@ impl<'source> Parser<'source> {
     /// Move the provided object to the heap and track with the garbage collector
     pub fn alloc<T>(&mut self, object: T) -> GcRef<T>
     where
-        T: MakeObj + Display,
+        T: Display,
     {
         #[cfg(feature = "debug_stress_gc")]
         {
@@ -763,7 +763,7 @@ impl<'source> Parser<'source> {
         self.vm.mark_roots();
         let mut compiler = Some(&mut self.compiler);
         while let Some(inner) = compiler {
-            inner.function.mark(&mut self.vm.gc);
+            inner.function.mark_gray(&mut self.vm.gc);
             compiler = inner.enclosing.as_mut();
         }
     }

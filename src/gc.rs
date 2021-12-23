@@ -1,6 +1,5 @@
 use std::{
     fmt::{Debug, Display},
-    marker::Sized,
     mem,
     ops::{Deref, DerefMut},
     ptr::NonNull,
@@ -18,6 +17,67 @@ use crate::{
 // - trait MakeObj
 // The following tracks more than just the Object structs (can stay like this)
 // - trait GarbageCollect
+
+pub struct Obj(NonNull<ObjHeader>);
+impl Obj {
+    pub fn transmute<T>(&self) -> GcRef<T> {
+        unsafe { mem::transmute(self.0.as_ref()) }
+    }
+
+    pub fn size_of_val(&self) -> usize {
+        match self.obj_type {
+            ObjectType::String => mem::size_of::<LoxString>(),
+            ObjectType::Function => mem::size_of::<Function>(),
+            ObjectType::NativeFunction => mem::size_of::<NativeFunction>(),
+            ObjectType::Closure => mem::size_of::<Closure>(),
+            ObjectType::Upvalue => mem::size_of::<Upvalue>(),
+        }
+    }
+
+    pub fn drop_object(&mut self) {
+        match self.obj_type {
+            ObjectType::String => self.transmute::<LoxString>().drop_ptr(),
+            ObjectType::Function => self.transmute::<Function>().drop_ptr(),
+            ObjectType::NativeFunction => self.transmute::<NativeFunction>().drop_ptr(),
+            ObjectType::Closure => self.transmute::<Closure>().drop_ptr(),
+            ObjectType::Upvalue => self.transmute::<Upvalue>().drop_ptr(),
+        }
+    }
+}
+
+impl Copy for Obj {}
+
+impl Clone for Obj {
+    fn clone(&self) -> Obj {
+        *self
+    }
+}
+
+impl Deref for Obj {
+    type Target = ObjHeader;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { self.0.as_ref() }
+    }
+}
+
+impl DerefMut for Obj {
+    fn deref_mut(&mut self) -> &mut ObjHeader {
+        unsafe { self.0.as_mut() }
+    }
+}
+
+impl Display for Obj {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.obj_type {
+            ObjectType::String => self.transmute::<LoxString>().fmt(f),
+            ObjectType::Function => self.transmute::<Function>().fmt(f),
+            ObjectType::NativeFunction => self.transmute::<NativeFunction>().fmt(f),
+            ObjectType::Closure => self.transmute::<Closure>().fmt(f),
+            ObjectType::Upvalue => self.transmute::<Upvalue>().fmt(f),
+        }
+    }
+}
 
 // Basically a NonNull but allows derefing
 // Should be passed around by value
@@ -38,6 +98,18 @@ impl<T: Display> GcRef<T> {
             println!("{:?} free {}", self.pointer.as_ptr(), self.deref());
         }
         unsafe { std::ptr::drop_in_place(self.pointer.as_ptr()) }
+    }
+
+    pub fn as_obj(&self) -> Obj {
+        unsafe { mem::transmute(self.deref()) }
+    }
+
+    pub fn size_of_val(&self) -> usize {
+        mem::size_of_val(self.deref())
+    }
+
+    pub fn is_marked(&self) -> bool {
+        self.as_obj().is_marked
     }
 }
 
@@ -76,14 +148,14 @@ impl<T: Display> Debug for GcRef<T> {
 }
 
 pub trait GarbageCollect {
-    fn mark(&mut self, gc: &mut Gc);
+    fn mark_gray(&mut self, gc: &mut Gc);
 }
 
 impl<T> GarbageCollect for GcRef<T>
 where
-    T: GarbageCollect + MakeObj + Display,
+    T: GarbageCollect + Display,
 {
-    fn mark(&mut self, gc: &mut Gc) {
+    fn mark_gray(&mut self, gc: &mut Gc) {
         if self.is_marked() {
             return;
         }
@@ -92,43 +164,45 @@ where
             // TODO How can we debug information about the outer object
         }
         println!("Marked {}", **self);
-        self.deref_mut().mark(gc);
-        gc.gray_stack.push(Obj::make(*self));
+        self.deref_mut().mark_gray(gc);
+        gc.gray_stack.push(self.as_obj());
     }
 }
 
 impl GarbageCollect for LoxString {
-    fn mark(&mut self, _gc: &mut Gc) {
+    fn mark_gray(&mut self, _gc: &mut Gc) {
         self.header.mark()
     }
 }
 
 impl GarbageCollect for Function {
-    fn mark(&mut self, _gc: &mut Gc) {
+    fn mark_gray(&mut self, _gc: &mut Gc) {
         self.header.mark()
     }
 }
 
 impl GarbageCollect for Closure {
-    fn mark(&mut self, _gc: &mut Gc) {
+    fn mark_gray(&mut self, _gc: &mut Gc) {
         self.header.mark()
     }
 }
 
 impl GarbageCollect for NativeFunction {
-    fn mark(&mut self, _gc: &mut Gc) {
+    fn mark_gray(&mut self, _gc: &mut Gc) {
         self.header.mark()
     }
 }
 
 pub struct ObjHeader {
+    obj_type: ObjectType,
     next: Option<Obj>,
     is_marked: bool,
 }
 
 impl ObjHeader {
-    pub fn new() -> Self {
+    pub fn new(obj_type: ObjectType) -> Self {
         Self {
+            obj_type,
             next: None,
             is_marked: false,
         }
@@ -139,140 +213,13 @@ impl ObjHeader {
     }
 }
 
-/// Obj is a wrapper which is copied around on the stack, and refers to an object tracked by the garbage collector
-/// Only used (so far) to make the linked list which the GC uses to keep track of all objects
 #[derive(Clone, Copy)]
-pub enum Obj {
-    String(GcRef<LoxString>),
-    Function(GcRef<Function>),
-    NativeFunction(GcRef<NativeFunction>),
-    Closure(GcRef<Closure>),
-    Upvalue(GcRef<Upvalue>),
-}
-
-impl Obj {
-    // #TODO Could optimize this with punning: mem::transmute
-    pub fn header(&mut self) -> &mut ObjHeader {
-        match self {
-            Obj::String(x) => &mut x.header,
-            Obj::Function(x) => &mut x.header,
-            Obj::NativeFunction(x) => &mut x.header,
-            Obj::Closure(x) => &mut x.header,
-            Obj::Upvalue(x) => &mut x.header,
-        }
-    }
-
-    pub fn drop_inner(self) {
-        match self {
-            Obj::String(x) => x.drop_ptr(),
-            Obj::Function(x) => x.drop_ptr(),
-            Obj::NativeFunction(x) => x.drop_ptr(),
-            Obj::Closure(x) => x.drop_ptr(),
-            Obj::Upvalue(x) => x.drop_ptr(),
-        }
-    }
-
-    pub fn size_of_val(&self) -> usize {
-        match self {
-            Obj::String(x) => mem::size_of_val(x.deref()),
-            Obj::Function(x) => mem::size_of_val(x.deref()),
-            Obj::NativeFunction(x) => mem::size_of_val(x.deref()),
-            Obj::Closure(x) => mem::size_of_val(x.deref()),
-            Obj::Upvalue(x) => mem::size_of_val(x.deref()),
-        }
-    }
-
-    fn make<T>(gc_ref: GcRef<T>) -> Self
-    where
-        T: MakeObj,
-    {
-        MakeObj::make_obj(gc_ref)
-    }
-}
-
-impl Display for Obj {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Obj::String(x) => x.fmt(f),
-            Obj::Function(x) => x.fmt(f),
-            Obj::NativeFunction(x) => x.fmt(f),
-            Obj::Closure(x) => x.fmt(f),
-            Obj::Upvalue(x) => x.fmt(f),
-        }
-    }
-}
-
-pub trait MakeObj {
-    fn make_obj(gc_ref: GcRef<Self>) -> Obj
-    where
-        Self: Sized;
-
-    fn is_marked(&self) -> bool;
-}
-
-impl MakeObj for LoxString {
-    fn make_obj(gc_ref: GcRef<Self>) -> Obj
-    where
-        Self: Sized,
-    {
-        Obj::String(gc_ref)
-    }
-
-    fn is_marked(&self) -> bool {
-        self.header.is_marked
-    }
-}
-
-impl MakeObj for Function {
-    fn make_obj(gc_ref: GcRef<Self>) -> Obj
-    where
-        Self: Sized,
-    {
-        Obj::Function(gc_ref)
-    }
-
-    fn is_marked(&self) -> bool {
-        self.header.is_marked
-    }
-}
-
-impl MakeObj for NativeFunction {
-    fn make_obj(gc_ref: GcRef<Self>) -> Obj
-    where
-        Self: Sized,
-    {
-        Obj::NativeFunction(gc_ref)
-    }
-
-    fn is_marked(&self) -> bool {
-        self.header.is_marked
-    }
-}
-
-impl MakeObj for Closure {
-    fn make_obj(gc_ref: GcRef<Self>) -> Obj
-    where
-        Self: Sized,
-    {
-        Obj::Closure(gc_ref)
-    }
-
-    fn is_marked(&self) -> bool {
-        self.header.is_marked
-    }
-}
-
-impl MakeObj for Upvalue {
-    fn make_obj(gc_ref: GcRef<Self>) -> Obj
-    where
-        Self: Sized,
-    {
-        Obj::Upvalue(gc_ref)
-    }
-
-    fn is_marked(&self) -> bool {
-        self.header.is_marked
-    }
+pub enum ObjectType {
+    String,
+    Function,
+    NativeFunction,
+    Closure,
+    Upvalue,
 }
 
 pub struct Gc {
@@ -313,7 +260,7 @@ impl Gc {
     /// Move the provided object to the heap and track with the garbage collector
     pub fn alloc<T>(&mut self, object: T) -> GcRef<T>
     where
-        T: MakeObj + Display,
+        T: Display,
     {
         // TODO https://users.rust-lang.org/t/how-to-create-large-objects-directly-in-heap/26405
 
@@ -328,10 +275,10 @@ impl Gc {
             }
         };
 
-        let mut obj = Obj::make(pointer);
+        let mut obj = pointer.as_obj();
 
         // Adjust linked list pointers
-        obj.header().next = self.first.take();
+        obj.next = self.first.take();
         self.first = Some(obj);
 
         #[cfg(feature = "debug_log_gc")]
@@ -344,7 +291,7 @@ impl Gc {
             );
         }
 
-        self.bytes_allocated += obj.size_of_val();
+        self.bytes_allocated += pointer.size_of_val();
         if self.bytes_allocated > self.next_gc {
             // self.collect_garbage();
         }
@@ -393,30 +340,33 @@ impl Gc {
         }
 
         // Mark all outgoing references
-        match obj {
-            Obj::String(_) => {
+        match obj.obj_type {
+            ObjectType::String => {
                 // No outgoing references
             }
-            Obj::NativeFunction(_) => {
+            ObjectType::NativeFunction => {
                 // No outgoing references
             }
-            Obj::Upvalue(upvalue) => {
+            ObjectType::Upvalue => {
+                let upvalue = obj.transmute::<Upvalue>();
                 if let Some(mut closed) = upvalue.closed {
-                    closed.mark(self);
+                    closed.mark_gray(self);
                 }
             }
-            Obj::Function(mut function) => {
+            ObjectType::Function => {
+                let mut function = obj.transmute::<Function>();
                 if let Some(mut name) = function.name {
-                    name.mark(self);
+                    name.mark_gray(self);
                 }
                 for constant in &mut function.chunk.constants {
-                    constant.mark(self);
+                    constant.mark_gray(self);
                 }
             }
-            Obj::Closure(mut closure) => {
-                closure.function.mark(self);
+            ObjectType::Closure => {
+                let mut closure = obj.transmute::<Closure>();
+                closure.function.mark_gray(self);
                 for i in 0..closure.upvalues.len() {
-                    closure.upvalues[i].mark(self);
+                    closure.upvalues[i].mark_gray(self);
                 }
             }
         }
@@ -427,26 +377,87 @@ impl Gc {
         let mut maybe_obj = self.first;
         // Walk through the linked list of every object in the heap, checking if marked
         while let Some(mut obj) = maybe_obj {
-            if obj.header().is_marked {
+            if obj.is_marked {
                 // Skip marked (black) objects, but unmark for next run
-                obj.header().is_marked = false;
+                obj.is_marked = false;
                 prev = maybe_obj;
-                maybe_obj = obj.header().next;
+                maybe_obj = obj.next;
                 println!("Not dropping {}", obj);
             } else {
                 // Unlink and free unmarked (white) objects
-                let unreached = obj;
-                maybe_obj = obj.header().next;
+                let mut unreached = obj;
+                maybe_obj = obj.next;
                 if let Some(mut prev) = prev {
-                    prev.header().next = maybe_obj;
+                    prev.next = maybe_obj;
                 } else {
                     self.first = maybe_obj;
                 }
 
                 println!("Dropping {}", obj);
                 self.bytes_allocated -= obj.size_of_val();
-                unreached.drop_inner();
+                unreached.drop_object();
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn string_header() {
+        let ls = LoxString::new("what up".to_string());
+        assert!(matches!(ls.header.obj_type, ObjectType::String));
+    }
+
+    #[test]
+    fn function_header() {
+        let mut ls = LoxString::new("func".to_string());
+        let pointer = unsafe { NonNull::new_unchecked(&mut ls) };
+        let gcref = GcRef { pointer };
+        let ls = Function::new(Some(gcref));
+        assert!(matches!(ls.header.obj_type, ObjectType::Function));
+    }
+
+    #[test]
+    fn alloc() {
+        let mut gc = Gc::new();
+        let obj1 = {
+            let ls = LoxString::new("first".to_string());
+            let gcref = gc.alloc(ls);
+            gcref.as_obj()
+        };
+        assert_eq!(gc.first.unwrap().0, obj1.0);
+        let obj2 = {
+            let ls = LoxString::new("second".to_string());
+            let gcref = gc.alloc(ls);
+            gcref.as_obj()
+        };
+        assert_eq!(gc.first.unwrap().0, obj2.0);
+        assert_eq!(gc.first.unwrap().next.unwrap().0, obj1.0);
+    }
+
+    #[test]
+    fn intern_transmute() {
+        let mut gc = Gc::new();
+        gc.intern("aaa".to_string());
+        gc.intern("bbb".to_string());
+        gc.intern("ccc".to_string());
+        let c = gc.first.unwrap().transmute::<LoxString>();
+        assert_eq!(c.as_str(), "ccc");
+        let b = c.header.next.unwrap().transmute::<LoxString>();
+        assert_eq!(b.as_str(), "bbb");
+        let a = b.header.next.unwrap().transmute::<LoxString>();
+        assert_eq!(a.as_str(), "aaa");
+    }
+
+    #[test]
+    fn size_of() {
+        let mut gc = Gc::new();
+        let ls = LoxString::new("first".to_string());
+        let size = std::mem::size_of_val(&ls);
+        gc.alloc(ls);
+        assert_eq!(gc.first.unwrap().size_of_val(), size);
     }
 }

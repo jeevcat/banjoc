@@ -109,10 +109,10 @@ impl<T, const N: usize> GarbageCollect for Stack<T, N>
 where
     T: GarbageCollect,
 {
-    fn mark(&mut self, gc: &mut Gc) {
+    fn mark_gray(&mut self, gc: &mut Gc) {
         for index in 0..self.index {
             let item = unsafe { self.data.get_unchecked_mut(index).assume_init_mut() };
-            item.mark(gc);
+            item.mark_gray(gc);
         }
     }
 }
