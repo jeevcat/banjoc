@@ -379,14 +379,11 @@ impl Vm {
     }
 
     fn define_native(&mut self, name: &str, function: NativeFn) {
-        // Pushing and popping to and from stack is only to ensure no GC occurs
-        // TODO probably can manually mark things as roots instead?
         let ls = self.intern(name.to_string());
+        // Pushing and popping to and from stack is only to ensure no GC occurs on call to alloc
         self.stack.push(Value::String(ls));
         let native = self.alloc(NativeFunction::new(function));
-        self.stack.push(Value::NativeFunction(native));
-        self.globals.insert(ls, *self.stack.peek(0));
-        self.stack.pop();
+        self.globals.insert(ls, Value::NativeFunction(native));
         self.stack.pop();
     }
 
