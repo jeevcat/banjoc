@@ -11,20 +11,9 @@ use crate::{
     value::Value,
 };
 
-// TODO Currently we use the following systems which all track the same structs
-// - struct GcRef<T>
-// - enum Obj
-// - trait MakeObj
-// The following tracks more than just the Object structs (can stay like this)
-// - trait GarbageCollect
-
-struct Obj(NonNull<ObjHeader>);
-impl Obj {
-    pub fn transmute<T>(&self) -> GcRef<T> {
-        unsafe { mem::transmute(self.0.as_ref()) }
-    }
-
-    pub fn size_of_val(&self) -> usize {
+struct HeaderPtr(NonNull<ObjHeader>);
+impl HeaderPtr {
+    fn size_of_val(&self) -> usize {
         match self.obj_type {
             ObjectType::String => mem::size_of::<LoxString>(),
             ObjectType::Function => mem::size_of::<Function>(),
@@ -34,7 +23,12 @@ impl Obj {
         }
     }
 
-    pub fn drop_object(&mut self) {
+    fn transmute<T>(&self) -> GcRef<T> {
+        unsafe { mem::transmute(self.0.as_ref()) }
+    }
+
+    fn drop_ptr(&mut self) {
+        // Must transmute to drop the full object, not just the header
         match self.obj_type {
             ObjectType::String => self.transmute::<LoxString>().drop_ptr(),
             ObjectType::Function => self.transmute::<Function>().drop_ptr(),
@@ -45,15 +39,15 @@ impl Obj {
     }
 }
 
-impl Copy for Obj {}
+impl Copy for HeaderPtr {}
 
-impl Clone for Obj {
-    fn clone(&self) -> Obj {
+impl Clone for HeaderPtr {
+    fn clone(&self) -> HeaderPtr {
         *self
     }
 }
 
-impl Deref for Obj {
+impl Deref for HeaderPtr {
     type Target = ObjHeader;
 
     fn deref(&self) -> &Self::Target {
@@ -61,13 +55,13 @@ impl Deref for Obj {
     }
 }
 
-impl DerefMut for Obj {
+impl DerefMut for HeaderPtr {
     fn deref_mut(&mut self) -> &mut ObjHeader {
         unsafe { self.0.as_mut() }
     }
 }
 
-impl Display for Obj {
+impl Display for HeaderPtr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.obj_type {
             ObjectType::String => self.transmute::<LoxString>().fmt(f),
@@ -93,7 +87,7 @@ impl<T: Display> GcRef<T> {
     }
 
     pub fn is_marked(&self) -> bool {
-        self.as_obj().is_marked
+        self.header().is_marked
     }
 
     fn drop_ptr(self) {
@@ -104,7 +98,7 @@ impl<T: Display> GcRef<T> {
         unsafe { std::ptr::drop_in_place(self.pointer.as_ptr()) }
     }
 
-    fn as_obj(&self) -> Obj {
+    fn header(&self) -> HeaderPtr {
         unsafe { mem::transmute(self.deref()) }
     }
 
@@ -160,18 +154,16 @@ where
             return;
         }
         #[cfg(feature = "debug_log_gc")]
-        {
-            // TODO How can we debug information about the outer object
-        }
         println!("Marked {}", **self);
-        self.as_obj().mark();
-        gc.gray_stack.push(self.as_obj());
+
+        self.header().mark();
+        gc.gray_stack.push(self.header());
     }
 }
 
 pub struct ObjHeader {
     obj_type: ObjectType,
-    next: Option<Obj>,
+    next: Option<HeaderPtr>,
     is_marked: bool,
 }
 
@@ -200,10 +192,10 @@ pub enum ObjectType {
 
 pub struct Gc {
     /// Linked list of all objects tracked by the garbage collector
-    first: Option<Obj>,
+    first: Option<HeaderPtr>,
     /// Table of interned strings
     strings: Table,
-    gray_stack: Vec<Obj>,
+    gray_stack: Vec<HeaderPtr>,
     bytes_allocated: usize,
     next_gc: usize,
 }
@@ -251,7 +243,7 @@ impl Gc {
             }
         };
 
-        let mut obj = pointer.as_obj();
+        let mut obj = pointer.header();
 
         // Adjust linked list pointers
         obj.next = self.first.take();
@@ -308,12 +300,10 @@ impl Gc {
         }
     }
 
-    fn blacken_object(&mut self, obj: Obj) {
+    fn blacken_object(&mut self, obj: HeaderPtr) {
         // A black object is any object who is marked and is no longer in the gray stack
         #[cfg(feature = "debug_log_gc")]
-        {
-            println!("blacken {}", obj);
-        }
+        println!("Blacken {}", obj);
 
         // Mark all outgoing references
         match obj.obj_type {
@@ -359,6 +349,8 @@ impl Gc {
                 obj.is_marked = false;
                 prev = maybe_obj;
                 maybe_obj = obj.next;
+
+                #[cfg(feature = "debug_log_gc")]
                 println!("Not dropping {}", obj);
             } else {
                 // Unlink and free unmarked (white) objects
@@ -370,9 +362,11 @@ impl Gc {
                     self.first = maybe_obj;
                 }
 
-                println!("Dropping {}", obj);
                 self.bytes_allocated -= obj.size_of_val();
-                unreached.drop_object();
+                unreached.drop_ptr();
+
+                #[cfg(feature = "debug_log_gc")]
+                println!("Dropped {}", obj);
             }
         }
     }
@@ -388,7 +382,7 @@ mod tests {
 
         let ls1 = LoxString::new("first".to_string());
         let ls1 = gc.alloc(ls1);
-        let obj = ls1.as_obj();
+        let obj = ls1.header();
         let ls2 = obj.transmute::<LoxString>();
         assert_eq!((&ls1.header as *const _), (&ls2.header as *const _));
         assert_eq!((&ls1.hash as *const _), (&ls2.hash as *const _));
@@ -417,13 +411,13 @@ mod tests {
         let obj1 = {
             let ls = LoxString::new("first".to_string());
             let gcref = gc.alloc(ls);
-            gcref.as_obj()
+            gcref.header()
         };
         assert_eq!(gc.first.unwrap().0, obj1.0);
         let obj2 = {
             let ls = LoxString::new("second".to_string());
             let gcref = gc.alloc(ls);
-            gcref.as_obj()
+            gcref.header()
         };
         assert_eq!(gc.first.unwrap().0, obj2.0);
         assert_eq!(gc.first.unwrap().next.unwrap().0, obj1.0);
