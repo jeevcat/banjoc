@@ -1,5 +1,5 @@
 use std::{
-    fmt::{Debug, Display},
+    fmt::Display,
     mem,
     ops::{Deref, DerefMut},
     ptr::NonNull,
@@ -135,12 +135,6 @@ impl<T> PartialEq for GcRef<T> {
     }
 }
 
-impl<T: Display> Debug for GcRef<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.deref().fmt(f)
-    }
-}
-
 pub trait GarbageCollect {
     fn mark_gray(&mut self, gc: &mut Gc);
 }
@@ -165,6 +159,8 @@ pub struct ObjHeader {
     obj_type: ObjectType,
     next: Option<HeaderPtr>,
     is_marked: bool,
+    /// Never GC while true
+    is_rooted: bool,
 }
 
 impl ObjHeader {
@@ -173,6 +169,7 @@ impl ObjHeader {
             obj_type,
             next: None,
             is_marked: false,
+            is_rooted: false,
         }
     }
 
@@ -260,9 +257,6 @@ impl Gc {
         }
 
         self.bytes_allocated += pointer.size_of_val();
-        if self.bytes_allocated > self.next_gc {
-            // self.collect_garbage();
-        }
 
         pointer
     }
@@ -344,6 +338,9 @@ impl Gc {
         let mut maybe_obj = self.first;
         // Walk through the linked list of every object in the heap, checking if marked
         while let Some(mut obj) = maybe_obj {
+            if obj.is_rooted {
+                continue;
+            }
             if obj.is_marked {
                 // Skip marked (black) objects, but unmark for next run
                 obj.is_marked = false;
@@ -369,6 +366,15 @@ impl Gc {
                 println!("Dropped {}", obj);
             }
         }
+    }
+
+    #[cfg(feature = "debug_stress_gc")]
+    pub fn should_gc(&self) -> bool {
+        true
+    }
+    #[cfg(not(feature = "debug_stress_gc"))]
+    pub fn should_gc(&self) -> bool {
+        self.bytes_allocated > self.next_gc
     }
 }
 

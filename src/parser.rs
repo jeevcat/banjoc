@@ -1,5 +1,4 @@
 use std::{
-    fmt::Display,
     mem::{self, MaybeUninit},
     ops::Index,
 };
@@ -11,7 +10,7 @@ use crate::{
     compiler::{Compiler, FunctionType},
     error::{LoxError, Result},
     gc::GcRef,
-    obj::{Function, LoxString},
+    obj::Function,
     op_code::OpCode,
     scanner::{Scanner, Token, TokenType},
     value::Value,
@@ -33,7 +32,7 @@ pub fn compile(source: &str, vm: &mut Vm) -> Result<GcRef<Function>> {
         Err(LoxError::CompileError("Parser error."))
     } else {
         println!("Alloc {}", function);
-        Ok(parser.alloc(function))
+        Ok(vm.alloc(function))
     }
 }
 
@@ -143,7 +142,7 @@ impl<'source> Parser<'source> {
             function, upvalues, ..
         } = self.pop_compiler();
         let upvalue_count = function.upvalue_count;
-        let value = Value::Function(self.alloc(function));
+        let value = Value::Function(self.vm.alloc(function));
 
         let constant = self.make_constant(value);
         self.emit_instruction(OpCode::Closure, constant);
@@ -462,7 +461,7 @@ impl<'source> Parser<'source> {
 
     fn string(&mut self, _can_assign: bool) {
         let string = self.previous.lexeme[1..self.previous.lexeme.len() - 1].to_string();
-        let value = Value::String(self.intern(string));
+        let value = Value::String(self.vm.intern(string));
         self.emit_constant(value);
     }
 
@@ -579,7 +578,7 @@ impl<'source> Parser<'source> {
     }
 
     fn identifier_constant(&mut self, name: Token) -> u8 {
-        let value = Value::String(self.intern(name.lexeme.to_string()));
+        let value = Value::String(self.vm.intern(name.lexeme.to_string()));
         self.make_constant(value)
     }
 
@@ -588,7 +587,7 @@ impl<'source> Parser<'source> {
     }
 
     fn push_compiler(&mut self, function_type: FunctionType) {
-        let function_name = self.intern(self.previous.lexeme.to_owned());
+        let function_name = self.vm.intern(self.previous.lexeme.to_owned());
         let new_compiler = Box::new(Compiler::new(function_type, Some(function_name)));
         let old_compiler = mem::replace(&mut self.compiler, new_compiler);
         self.compiler.enclosing = Some(old_compiler);
@@ -737,35 +736,6 @@ impl<'source> Parser<'source> {
 
         eprintln!(": {}", message);
         self.had_error = true;
-    }
-
-    pub fn intern(&mut self, string: String) -> GcRef<LoxString> {
-        self.vm.gc.intern(string)
-    }
-
-    /// Move the provided object to the heap and track with the garbage collector
-    pub fn alloc<T>(&mut self, object: T) -> GcRef<T>
-    where
-        T: Display,
-    {
-        #[cfg(feature = "debug_stress_gc")]
-        {
-            // TODO is this truly often enough?
-            println!("Start compiler gc");
-            self.mark_roots();
-            self.vm.gc.collect_garbage();
-        }
-
-        self.vm.gc.alloc(object)
-    }
-
-    fn mark_roots(&mut self) {
-        self.vm.mark_roots();
-        let mut compiler = Some(&mut self.compiler);
-        while let Some(inner) = compiler {
-            inner.function.header.mark();
-            compiler = inner.enclosing.as_mut();
-        }
     }
 }
 

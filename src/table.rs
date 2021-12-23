@@ -28,8 +28,6 @@ impl Table {
     }
 
     pub fn insert(&mut self, key: GcRef<LoxString>, value: Value) -> bool {
-        dbg!(key);
-        dbg!(value);
         if self.count + 1 > (self.capacity() as f64 * Table::MAX_LOAD) as usize {
             self.grow();
         }
@@ -41,8 +39,6 @@ impl Table {
         }
         entry.key = Some(key);
         entry.value = value;
-
-        dbg!(self.count);
 
         is_new_key
     }
@@ -61,7 +57,6 @@ impl Table {
     }
 
     pub fn remove(&mut self, key: GcRef<LoxString>) -> bool {
-        println!("Remove {:?}", key);
         if self.count == 0 {
             return false;
         }

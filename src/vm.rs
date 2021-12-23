@@ -50,13 +50,11 @@ impl Vm {
     }
 
     pub fn interpret(&mut self, source: &str) -> Result<()> {
-        // All this stack pushing and popping is to keep the carbage collector happy?
         let function = parser::compile(source, self)?;
+        // Leave the <script> function on the stack forever so it's not GC'd
         self.stack.push(Value::Function(function));
         let closure = Closure::new(function);
-        self.stack.pop();
         let closure = self.alloc(closure);
-        self.stack.push(Value::Closure(closure));
 
         self.call(closure, 0)?;
 
@@ -394,6 +392,7 @@ impl Vm {
     }
 
     pub fn intern(&mut self, string: String) -> GcRef<LoxString> {
+        self.mark_and_collect_garbage();
         self.gc.intern(string)
     }
 
@@ -402,18 +401,18 @@ impl Vm {
     where
         T: Display,
     {
-        #[cfg(feature = "debug_stress_gc")]
-        {
-            // TODO is this truly often enough?
-            println!("Start vm gc");
-            self.mark_roots();
-            self.gc.collect_garbage();
-        }
-
+        self.mark_and_collect_garbage();
         self.gc.alloc(object)
     }
 
-    pub fn mark_roots(&mut self) {
+    fn mark_and_collect_garbage(&mut self) {
+        if self.gc.should_gc() {
+            self.mark_roots();
+            self.gc.collect_garbage();
+        }
+    }
+
+    fn mark_roots(&mut self) {
         // Stack
         self.stack.mark_gray(&mut self.gc);
 
@@ -421,10 +420,10 @@ impl Vm {
         self.frames.mark_gray(&mut self.gc);
 
         // Open upvalue list
-        let mut upvalue = self.open_upvalues;
-        while let Some(inner) = upvalue {
-            inner.read(&self.stack).mark_gray(&mut self.gc);
-            upvalue = inner.next;
+        let mut next = self.open_upvalues;
+        while let Some(upvalue) = next {
+            upvalue.read(&self.stack).mark_gray(&mut self.gc);
+            next = upvalue.next;
         }
 
         // Globals
