@@ -102,6 +102,7 @@ impl Table {
         }
     }
 
+    /// Clear out any dangling pointers for strings that are freed
     pub fn remove_white(&mut self) {
         for i in 0..self.capacity() {
             let entry = &self.entries[i];

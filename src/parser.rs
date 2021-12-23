@@ -9,15 +9,14 @@ use crate::{
     chunk::Chunk,
     compiler::{Compiler, FunctionType},
     error::{LoxError, Result},
-    gc::GcRef,
+    gc::{GcRef, Gc},
     obj::Function,
     op_code::OpCode,
     scanner::{Scanner, Token, TokenType},
     value::Value,
-    vm::Vm,
 };
 
-pub fn compile(source: &str, vm: &mut Vm) -> Result<GcRef<Function>> {
+pub fn compile(source: &str, vm: &mut Gc) -> Result<GcRef<Function>> {
     let scanner = Scanner::new(source);
     let mut parser = Parser::new(scanner, vm);
 
@@ -40,14 +39,14 @@ struct Parser<'source> {
     compiler: Box<Compiler<'source>>,
     current: Token<'source>,
     previous: Token<'source>,
-    vm: &'source mut Vm,
+    gc: &'source mut Gc,
     had_error: bool,
     panic_mode: bool,
     rules: ParseRuleTable<'source>,
 }
 
 impl<'source> Parser<'source> {
-    fn new(scanner: Scanner<'source>, vm: &'source mut Vm) -> Parser<'source> {
+    fn new(scanner: Scanner<'source>, gc: &'source mut Gc) -> Parser<'source> {
         let rules = ParseRuleTable::new();
 
         Self {
@@ -55,7 +54,7 @@ impl<'source> Parser<'source> {
             compiler: Box::new(Compiler::new(FunctionType::Script, None)),
             current: Token::none(),
             previous: Token::none(),
-            vm,
+            gc,
             had_error: false,
             panic_mode: false,
             rules,
@@ -141,7 +140,7 @@ impl<'source> Parser<'source> {
             function, upvalues, ..
         } = self.pop_compiler();
         let upvalue_count = function.upvalue_count;
-        let value = Value::Function(self.vm.alloc(function));
+        let value = Value::Function(self.gc.alloc(function));
 
         let constant = self.make_constant(value);
         self.emit_instruction(OpCode::Closure, constant);
@@ -460,7 +459,7 @@ impl<'source> Parser<'source> {
 
     fn string(&mut self, _can_assign: bool) {
         let string = self.previous.lexeme[1..self.previous.lexeme.len() - 1].to_string();
-        let value = Value::String(self.vm.intern(string));
+        let value = Value::String(self.gc.intern(string));
         self.emit_constant(value);
     }
 
@@ -577,7 +576,7 @@ impl<'source> Parser<'source> {
     }
 
     fn identifier_constant(&mut self, name: Token) -> u8 {
-        let value = Value::String(self.vm.intern(name.lexeme.to_string()));
+        let value = Value::String(self.gc.intern(name.lexeme.to_string()));
         self.make_constant(value)
     }
 
@@ -586,7 +585,7 @@ impl<'source> Parser<'source> {
     }
 
     fn push_compiler(&mut self, function_type: FunctionType) {
-        let function_name = self.vm.intern(self.previous.lexeme.to_owned());
+        let function_name = self.gc.intern(self.previous.lexeme.to_owned());
         let new_compiler = Box::new(Compiler::new(function_type, Some(function_name)));
         let old_compiler = mem::replace(&mut self.compiler, new_compiler);
         self.compiler.enclosing = Some(old_compiler);

@@ -159,8 +159,6 @@ pub struct ObjHeader {
     obj_type: ObjectType,
     next: Option<HeaderPtr>,
     is_marked: bool,
-    /// Never GC while true
-    is_rooted: bool,
 }
 
 impl ObjHeader {
@@ -169,7 +167,6 @@ impl ObjHeader {
             obj_type,
             next: None,
             is_marked: false,
-            is_rooted: false,
         }
     }
 
@@ -338,9 +335,6 @@ impl Gc {
         let mut maybe_obj = self.first;
         // Walk through the linked list of every object in the heap, checking if marked
         while let Some(mut obj) = maybe_obj {
-            if obj.is_rooted {
-                continue;
-            }
             if obj.is_marked {
                 // Skip marked (black) objects, but unmark for next run
                 obj.is_marked = false;
@@ -359,11 +353,11 @@ impl Gc {
                     self.first = maybe_obj;
                 }
 
+                #[cfg(feature = "debug_log_gc")]
+                println!("Dropping {}", obj);
+
                 self.bytes_allocated -= obj.size_of_val();
                 unreached.drop_ptr();
-
-                #[cfg(feature = "debug_log_gc")]
-                println!("Dropped {}", obj);
             }
         }
     }

@@ -50,7 +50,7 @@ impl Vm {
     }
 
     pub fn interpret(&mut self, source: &str) -> Result<()> {
-        let function = parser::compile(source, self)?;
+        let function = parser::compile(source, &mut self.gc)?;
         // Leave the <script> function on the stack forever so it's not GC'd
         self.stack.push(Value::Function(function));
         let closure = Closure::new(function);
@@ -150,7 +150,7 @@ impl Vm {
                                 self.globals.insert(name, *self.stack.peek(0));
                                 self.stack.pop();
                             }
-                            // The compiler never emits and instruct that refers to a non-string constant
+                            // The compiler never emits any instructions that refer to a non-string constant
                             _ => unreachable!(),
                         }
                     }
@@ -167,7 +167,7 @@ impl Vm {
                                     ));
                                 }
                             }
-                            // The compiler never emits and instruct that refers to a non-string constant
+                            // The compiler never emits any instructions that refer to a non-string constant
                             _ => unreachable!(),
                         }
                     }
@@ -183,7 +183,7 @@ impl Vm {
                                     ));
                                 }
                             }
-                            // The compiler never emits and instruct that refers to a non-string constant
+                            // The compiler never emits any instructions that refer to a non-string constant
                             _ => unreachable!(),
                         }
                     }
@@ -426,7 +426,6 @@ impl Vm {
         }
 
         // Globals
-        println!("Marking globals");
         self.globals.mark_gray(&mut self.gc);
     }
 }
