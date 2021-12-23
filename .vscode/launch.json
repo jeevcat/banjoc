@@ -19,7 +19,7 @@
                     "kind": "bin"
                 }
             },
-            "args": ["tests/scope.lox"],
+            "args": ["tests/class.lox"],
             "cwd": "${workspaceFolder}"
         },
         {

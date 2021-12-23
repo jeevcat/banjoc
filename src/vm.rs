@@ -268,6 +268,44 @@ impl Vm {
                             _ => unreachable!(),
                         }
                     }
+                    OpCode::GetProperty => {
+                        let instance = *self.stack.peek(0);
+                        let instance = match instance {
+                            Value::Instance(instance) => instance,
+                            _ => return self.runtime_error("Only instances have properties."),
+                        };
+                        let name = match self.current_frame().read_constant() {
+                            Value::String(name) => name,
+                            _ => unreachable!(),
+                        };
+                        if let Some(value) = instance.fields.get(name) {
+                            self.stack.pop(); // Instance
+                            self.stack.push(value);
+                        } else {
+                            return self.runtime_error(&format!(
+                                "Undefined property '{}'.",
+                                name.as_str()
+                            ));
+                        }
+                    }
+                    OpCode::SetProperty => {
+                        let instance = *self.stack.peek(1);
+                        let mut instance = match instance {
+                            Value::Instance(instance) => instance,
+                            _ => return self.runtime_error("Only instances have fields."),
+                        };
+                        let name = match self.current_frame().read_constant() {
+                            Value::String(name) => name,
+                            _ => unreachable!(),
+                        };
+                        let value = *self.stack.peek(0);
+                        instance.fields.insert(name, value);
+
+                        // Remove 2nd element from the stack (the instance)
+                        let value = self.stack.pop();
+                        self.stack.pop();
+                        self.stack.push(value);
+                    }
                 }
             }
         }

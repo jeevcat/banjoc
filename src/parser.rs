@@ -389,6 +389,18 @@ impl<'source> Parser<'source> {
         self.emit_instruction(OpCode::Call, arg_count);
     }
 
+    fn dot(&mut self, _can_assign: bool) {
+        self.consume(TokenType::Identifier, "Expect property name after '.'.");
+        let name = self.identifier_constant(self.previous);
+
+        if _can_assign && self.advance_matching(TokenType::Equal) {
+            self.expression();
+            self.emit_instruction(OpCode::SetProperty, name);
+        } else {
+            self.emit_instruction(OpCode::GetProperty, name);
+        }
+    }
+
     fn unary(&mut self, _can_assign: bool) {
         let operator_type = self.previous.token_type;
 
@@ -835,7 +847,7 @@ impl<'source> ParseRuleTable<'source> {
             LeftBrace =>    ParseRule::new(None,                   None,                 P::None),
             RightBrace =>   ParseRule::new(None,                   None,                 P::None),
             Comma =>        ParseRule::new(None,                   None,                 P::None),
-            Dot =>          ParseRule::new(None,                   None,                 P::None),
+            Dot =>          ParseRule::new(None,                   Some(Parser::dot),    P::Call),
             Minus =>        ParseRule::new(Some(Parser::unary),    Some(Parser::binary), P::Term),
             Plus =>         ParseRule::new(None,                   Some(Parser::binary), P::Term),
             Semicolon =>    ParseRule::new(None,                   None,                 P::None),
