@@ -7,7 +7,7 @@ use std::{
 use crate::{
     error::{LoxError, Result},
     gc::{GarbageCollect, Gc, GcRef},
-    obj::{Closure, LoxString, NativeFn, NativeFunction, Upvalue},
+    obj::{Class, Closure, LoxString, NativeFn, NativeFunction, Upvalue},
     parser,
     stack::Stack,
     table::Table,
@@ -257,6 +257,16 @@ impl Vm {
                     OpCode::CloseUpvalue => {
                         self.close_upvalues(self.stack.get_offset());
                         self.stack.pop();
+                    }
+                    OpCode::Class => {
+                        let value = self.current_frame().read_constant();
+                        match value {
+                            Value::String(name) => {
+                                let class = self.alloc(Class::new(name));
+                                self.stack.push(Value::Class(class));
+                            }
+                            _ => unreachable!(),
+                        }
                     }
                 }
             }

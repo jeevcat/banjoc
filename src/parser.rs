@@ -9,7 +9,7 @@ use crate::{
     chunk::Chunk,
     compiler::{Compiler, FunctionType},
     error::{LoxError, Result},
-    gc::{GcRef, Gc},
+    gc::{Gc, GcRef},
     obj::Function,
     op_code::OpCode,
     scanner::{Scanner, Token, TokenType},
@@ -151,6 +151,18 @@ impl<'source> Parser<'source> {
         }
     }
 
+    fn class_declaration(&mut self) {
+        self.consume(TokenType::Identifier, "Expect class name");
+        let name_constant = self.identifier_constant(self.previous);
+        self.declare_variable();
+
+        self.emit_instruction(OpCode::Class, name_constant);
+        self.define_variable(name_constant);
+
+        self.consume(TokenType::LeftBrace, "Expect '{' before class body");
+        self.consume(TokenType::RightBrace, "Expect '}' after class body");
+    }
+
     fn fun_declaration(&mut self) {
         let global = self.parse_variable("Expect function name.");
         self.compiler.mark_var_initialized();
@@ -175,7 +187,9 @@ impl<'source> Parser<'source> {
     }
 
     fn declaration(&mut self) {
-        if self.advance_matching(TokenType::Fun) {
+        if self.advance_matching(TokenType::Class) {
+            self.class_declaration();
+        } else if self.advance_matching(TokenType::Fun) {
             self.fun_declaration();
         } else if self.advance_matching(TokenType::Var) {
             self.var_declaration();
@@ -594,7 +608,7 @@ impl<'source> Parser<'source> {
     fn pop_compiler(&mut self) -> Compiler {
         self.emit_return();
 
-        #[cfg(feature = "debug_trace_execution")]
+        #[cfg(feature = "debug_print_code")]
         {
             if !self.had_error {
                 let name = self

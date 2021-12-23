@@ -9,7 +9,7 @@ use vm::Vm;
 
 mod chunk;
 mod compiler;
-#[cfg(feature = "debug_trace_execution")]
+#[cfg(any(feature = "debug_trace_execution", feature = "debug_print_code"))]
 mod disassembler;
 mod error;
 mod gc;

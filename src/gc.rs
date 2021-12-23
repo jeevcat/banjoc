@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    obj::{hash_string, Closure, Function, LoxString, NativeFunction, Upvalue},
+    obj::{hash_string, Class, Closure, Function, LoxString, NativeFunction, Upvalue},
     table::Table,
     value::Value,
 };
@@ -20,6 +20,7 @@ impl HeaderPtr {
             ObjectType::NativeFunction => mem::size_of::<NativeFunction>(),
             ObjectType::Closure => mem::size_of::<Closure>(),
             ObjectType::Upvalue => mem::size_of::<Upvalue>(),
+            ObjectType::Class => mem::size_of::<Class>(),
         }
     }
 
@@ -35,6 +36,7 @@ impl HeaderPtr {
             ObjectType::NativeFunction => self.transmute::<NativeFunction>().drop_ptr(),
             ObjectType::Closure => self.transmute::<Closure>().drop_ptr(),
             ObjectType::Upvalue => self.transmute::<Upvalue>().drop_ptr(),
+            ObjectType::Class => self.transmute::<Class>().drop_ptr(),
         }
     }
 }
@@ -69,6 +71,7 @@ impl Display for HeaderPtr {
             ObjectType::NativeFunction => self.transmute::<NativeFunction>().fmt(f),
             ObjectType::Closure => self.transmute::<Closure>().fmt(f),
             ObjectType::Upvalue => self.transmute::<Upvalue>().fmt(f),
+            ObjectType::Class => self.transmute::<Class>().fmt(f),
         }
     }
 }
@@ -182,6 +185,7 @@ pub enum ObjectType {
     NativeFunction,
     Closure,
     Upvalue,
+    Class,
 }
 
 pub struct Gc {
@@ -326,6 +330,10 @@ impl Gc {
                 for i in 0..closure.upvalues.len() {
                     closure.upvalues[i].mark_gray(self);
                 }
+            }
+            ObjectType::Class => {
+                let mut class = obj.transmute::<Class>();
+                class.name.mark_gray(self);
             }
         }
     }

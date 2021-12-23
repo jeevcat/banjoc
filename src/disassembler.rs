@@ -8,6 +8,7 @@ pub fn disassemble(chunk: &Chunk, name: &str) {
     }
 }
 
+#[cfg(feature = "debug_trace_execution")]
 pub fn disassemble_instruction_ptr(chunk: &Chunk, ip: *const u8) -> usize {
     let offset = unsafe { ip.offset_from(chunk.code.as_ptr()) as usize };
     disassemble_instruction(chunk, offset)
@@ -78,6 +79,7 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> usize {
             OpCode::GetUpvalue => byte_instruction("OP_GET_UPVALUE", chunk, offset),
             OpCode::SetUpvalue => byte_instruction("OP_SET_UPVALUE", chunk, offset),
             OpCode::CloseUpvalue => simple_instruction("OP_CLOSE_UPVALUE", offset),
+            OpCode::Class => constant_instruction("OP_CLASS", chunk, offset),
         },
         Err(_) => {
             println!("Unknown opcode {}", byte);

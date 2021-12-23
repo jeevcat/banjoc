@@ -4,6 +4,7 @@ use std::fmt::Display;
 use std::fmt::Formatter;
 use std::ops::Deref;
 
+use crate::obj::Class;
 use crate::{
     gc::{GarbageCollect, Gc, GcRef},
     obj::{Closure, Function, LoxString, NativeFunction},
@@ -19,6 +20,7 @@ pub enum Value {
     Function(GcRef<Function>),
     NativeFunction(GcRef<NativeFunction>),
     Closure(GcRef<Closure>),
+    Class(GcRef<Class>),
 }
 
 impl Value {
@@ -56,6 +58,7 @@ impl Display for Value {
             Value::Function(x) => Display::fmt(x.deref(), f),
             Value::NativeFunction(x) => Display::fmt(x.deref(), f),
             Value::Closure(x) => Display::fmt(x.deref(), f),
+            Value::Class(x) => Display::fmt(x.deref(), f),
         }
     }
 }

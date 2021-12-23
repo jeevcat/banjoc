@@ -1,5 +1,5 @@
 use std::{
-    fmt::{Display, Formatter, Write},
+    fmt::{self, Display, Formatter, Write},
     ops::Deref,
 };
 
@@ -32,7 +32,7 @@ impl LoxString {
 }
 
 impl Display for LoxString {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         Display::fmt(&self.string, f)
     }
 }
@@ -68,7 +68,7 @@ impl Function {
 }
 
 impl Display for Function {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         if let Some(name) = self.name {
             f.write_str("<fn ")?;
             Display::fmt(&name.string, f)?;
@@ -96,7 +96,7 @@ impl NativeFunction {
 }
 
 impl Display for NativeFunction {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.write_str("<native fn>")?;
         Ok(())
     }
@@ -120,7 +120,7 @@ impl Closure {
 }
 
 impl Display for Closure {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         Display::fmt(self.function.deref(), f)
     }
 }
@@ -162,7 +162,27 @@ impl Upvalue {
 }
 
 impl Display for Upvalue {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.write_str("upvalue")
+    }
+}
+
+pub struct Class {
+    pub header: ObjHeader,
+    pub name: GcRef<LoxString>,
+}
+
+impl Display for Class {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name.as_str())
+    }
+}
+
+impl Class {
+    pub fn new(name: GcRef<LoxString>) -> Self {
+        Self {
+            header: ObjHeader::new(ObjectType::Class),
+            name,
+        }
     }
 }
