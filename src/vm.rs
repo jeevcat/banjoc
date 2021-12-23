@@ -388,7 +388,6 @@ impl Vm {
         self.globals.insert(ls, *self.stack.peek(0));
         self.stack.pop();
         self.stack.pop();
-        println!("Defined native fn {}", name);
     }
 
     pub fn intern(&mut self, string: String) -> GcRef<LoxString> {
@@ -454,6 +453,7 @@ impl Default for CallFrame {
 
 impl CallFrame {
     fn new(closure: GcRef<Closure>, slot: usize) -> Self {
+        dbg!(slot);
         Self {
             closure,
             ip: closure.function.chunk.code.as_ptr(),
@@ -479,6 +479,8 @@ impl CallFrame {
 
     fn read_local_offset(&mut self) -> usize {
         let offset = self.read_byte() as usize;
+        dbg!(self.slot);
+        dbg!(offset);
         self.slot + offset
     }
 

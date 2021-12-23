@@ -31,7 +31,6 @@ pub fn compile(source: &str, vm: &mut Vm) -> Result<GcRef<Function>> {
     if parser.had_error {
         Err(LoxError::CompileError("Parser error."))
     } else {
-        println!("Alloc {}", function);
         Ok(vm.alloc(function))
     }
 }
