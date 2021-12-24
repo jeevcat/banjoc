@@ -7,8 +7,8 @@ use std::{
 
 use crate::{
     obj::{
-        hash_string, Class, Closure, Function, Instance, LoxString, NativeFunction, ObjectType,
-        Upvalue,
+        hash_string, BoundMethod, Class, Closure, Function, Instance, LoxString, NativeFunction,
+        ObjectType, Upvalue,
     },
     table::Table,
     value::Value,
@@ -25,6 +25,7 @@ impl HeaderPtr {
             ObjectType::Upvalue => mem::size_of::<Upvalue>(),
             ObjectType::Class => mem::size_of::<Class>(),
             ObjectType::Instance => mem::size_of::<Instance>(),
+            ObjectType::BoundMethod => mem::size_of::<BoundMethod>(),
         }
     }
 
@@ -42,6 +43,7 @@ impl HeaderPtr {
             ObjectType::Upvalue => self.transmute::<Upvalue>().drop_ptr(),
             ObjectType::Class => self.transmute::<Class>().drop_ptr(),
             ObjectType::Instance => self.transmute::<Instance>().drop_ptr(),
+            ObjectType::BoundMethod => self.transmute::<BoundMethod>().drop_ptr(),
         }
     }
 }
@@ -78,6 +80,7 @@ impl Display for HeaderPtr {
             ObjectType::Upvalue => self.transmute::<Upvalue>().fmt(f),
             ObjectType::Class => self.transmute::<Class>().fmt(f),
             ObjectType::Instance => self.transmute::<Instance>().fmt(f),
+            ObjectType::BoundMethod => self.transmute::<BoundMethod>().fmt(f),
         }
     }
 }
@@ -330,11 +333,17 @@ impl Gc {
             ObjectType::Class => {
                 let mut class = obj.transmute::<Class>();
                 class.name.mark_gray(self);
+                class.methods.mark_gray(self);
             }
             ObjectType::Instance => {
                 let mut instance = obj.transmute::<Instance>();
                 instance.class.mark_gray(self);
                 instance.fields.mark_gray(self);
+            }
+            ObjectType::BoundMethod => {
+                let mut bound = obj.transmute::<BoundMethod>();
+                bound.receiver.mark_gray(self);
+                bound.method.mark_gray(self);
             }
         }
     }

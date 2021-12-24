@@ -7,7 +7,7 @@ use std::{
 use crate::{
     error::{LoxError, Result},
     gc::{GarbageCollect, Gc, GcRef},
-    obj::{Class, Closure, Instance, LoxString, NativeFn, NativeFunction, Upvalue},
+    obj::{BoundMethod, Class, Closure, Instance, LoxString, NativeFn, NativeFunction, Upvalue},
     parser,
     stack::Stack,
     table::Table,
@@ -282,10 +282,7 @@ impl Vm {
                             self.stack.pop(); // Instance
                             self.stack.push(value);
                         } else {
-                            return self.runtime_error(&format!(
-                                "Undefined property '{}'.",
-                                name.as_str()
-                            ));
+                            self.bind_method(instance.class, name)?;
                         }
                     }
                     OpCode::SetProperty => {
@@ -305,6 +302,13 @@ impl Vm {
                         let value = self.stack.pop();
                         self.stack.pop();
                         self.stack.push(value);
+                    }
+                    OpCode::Method => {
+                        let name = match self.current_frame().read_constant() {
+                            Value::String(name) => name,
+                            _ => unreachable!(),
+                        };
+                        self.define_method(name);
                     }
                 }
             }
@@ -345,11 +349,33 @@ impl Vm {
                 self.stack.push(Value::Instance(instance));
                 Ok(())
             }
+            Value::BoundMethod(bound) => self.call(bound.method, arg_count),
+
             _ => self.runtime_error(&format!(
                 "Can only call functions and classes, not on '{}'.",
                 callee
             )),
         }
+    }
+
+    fn bind_method(&mut self, class: GcRef<Class>, name: GcRef<LoxString>) -> Result<()> {
+        let method = match class.methods.get(name) {
+            Some(value) => value,
+            None => return self.runtime_error(&format!("Undefined property '{}'.", name.as_str())),
+        };
+
+        let closure = match method {
+            Value::Closure(closure) => closure,
+            _ => unreachable!(),
+        };
+
+        let bound = self.alloc(BoundMethod::new(*self.stack.peek(0), closure));
+        let bound = Value::BoundMethod(bound);
+
+        self.stack.pop();
+        self.stack.push(bound);
+
+        Ok(())
     }
 
     fn call(&mut self, callee: GcRef<Closure>, arg_count: usize) -> Result<()> {
@@ -408,6 +434,15 @@ impl Vm {
             upvalue.closed = Some(*self.stack.read(upvalue.location));
             self.open_upvalues = upvalue.next;
         }
+    }
+
+    fn define_method(&mut self, name: GcRef<LoxString>) {
+        let method = *self.stack.peek(0);
+        let mut class = match self.stack.peek(1) {
+            Value::Class(class) => *class,
+            _ => unreachable!(),
+        };
+        class.methods.insert(name, method);
     }
 
     fn runtime_error(&self, message: &str) -> Result<()> {

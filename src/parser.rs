@@ -151,16 +151,35 @@ impl<'source> Parser<'source> {
         }
     }
 
+    fn method(&mut self) {
+        self.consume(TokenType::Identifier, "Expect method name.");
+        let constant = self.identifier_constant(self.previous);
+
+        let function_type = FunctionType::Function;
+        self.function(function_type);
+
+        self.emit_instruction(OpCode::Method, constant);
+    }
+
     fn class_declaration(&mut self) {
         self.consume(TokenType::Identifier, "Expect class name");
+        let class_name = self.previous;
         let name_constant = self.identifier_constant(self.previous);
         self.declare_variable();
 
         self.emit_instruction(OpCode::Class, name_constant);
         self.define_variable(name_constant);
 
+        if let Err(err) = self.named_variable(class_name, false) {
+            self.error(err);
+        }
         self.consume(TokenType::LeftBrace, "Expect '{' before class body");
+        while !self.check(TokenType::RightBrace) && !self.check(TokenType::Eof) {
+            // Lox doesn't have field declarations -> everything between the braces must be a method
+            self.method();
+        }
         self.consume(TokenType::RightBrace, "Expect '}' after class body");
+        self.emit_opcode(OpCode::Pop);
     }
 
     fn fun_declaration(&mut self) {

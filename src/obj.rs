@@ -20,6 +20,7 @@ pub enum ObjectType {
     Upvalue,
     Class,
     Instance,
+    BoundMethod,
 }
 
 pub struct LoxString {
@@ -182,6 +183,7 @@ impl Display for Upvalue {
 pub struct Class {
     pub header: ObjHeader,
     pub name: GcRef<LoxString>,
+    pub methods: Table,
 }
 
 impl Display for Class {
@@ -195,6 +197,7 @@ impl Class {
         Self {
             header: ObjHeader::new(ObjectType::Class),
             name,
+            methods: Table::new(),
         }
     }
 }
@@ -218,5 +221,27 @@ impl Instance {
             class,
             fields: Table::new(),
         }
+    }
+}
+
+pub struct BoundMethod {
+    pub header: ObjHeader,
+    pub receiver: Value,
+    pub method: GcRef<Closure>,
+}
+
+impl BoundMethod {
+    pub fn new(receiver: Value, method: GcRef<Closure>) -> Self {
+        Self {
+            header: ObjHeader::new(ObjectType::BoundMethod),
+            receiver,
+            method,
+        }
+    }
+}
+
+impl Display for BoundMethod {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.method.function.fmt(f)
     }
 }

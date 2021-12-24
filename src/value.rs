@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     gc::{GarbageCollect, Gc, GcRef},
-    obj::{Class, Closure, Function, Instance, LoxString, NativeFunction},
+    obj::{BoundMethod, Class, Closure, Function, Instance, LoxString, NativeFunction},
 };
 
 #[derive(Clone, Copy)]
@@ -21,6 +21,7 @@ pub enum Value {
     Closure(GcRef<Closure>),
     Class(GcRef<Class>),
     Instance(GcRef<Instance>),
+    BoundMethod(GcRef<BoundMethod>),
 }
 
 impl Value {
@@ -60,6 +61,7 @@ impl Display for Value {
             Value::Closure(x) => Display::fmt(x.deref(), f),
             Value::Class(x) => Display::fmt(x.deref(), f),
             Value::Instance(x) => Display::fmt(x.deref(), f),
+            Value::BoundMethod(x) => Display::fmt(x.deref(), f),
         }
     }
 }
