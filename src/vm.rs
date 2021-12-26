@@ -274,15 +274,11 @@ impl Vm {
                         }
                     }
                     OpCode::GetProperty => {
-                        let instance = *self.stack.peek(0);
-                        let instance = match instance {
+                        let instance = match *self.stack.peek(0) {
                             Value::Instance(instance) => instance,
                             _ => return self.runtime_error("Only instances have properties."),
                         };
-                        let name = match self.current_frame().read_constant() {
-                            Value::String(name) => name,
-                            _ => unreachable!(),
-                        };
+                        let name = self.read_string();
                         if let Some(value) = instance.fields.get(name) {
                             self.stack.pop(); // Instance
                             self.stack.push(value);
@@ -296,10 +292,7 @@ impl Vm {
                             Value::Instance(instance) => instance,
                             _ => return self.runtime_error("Only instances have fields."),
                         };
-                        let name = match self.current_frame().read_constant() {
-                            Value::String(name) => name,
-                            _ => unreachable!(),
-                        };
+                        let name = self.read_string();
                         let value = *self.stack.peek(0);
                         instance.fields.insert(name, value);
 
@@ -309,11 +302,13 @@ impl Vm {
                         self.stack.push(value);
                     }
                     OpCode::Method => {
-                        let name = match self.current_frame().read_constant() {
-                            Value::String(name) => name,
-                            _ => unreachable!(),
-                        };
+                        let name = self.read_string();
                         self.define_method(name);
+                    }
+                    OpCode::Invoke => {
+                        let method = self.read_string();
+                        let arg_count = self.current_frame().read_byte() as usize;
+                        self.invoke(method, arg_count)?;
                     }
                 }
             }
@@ -322,6 +317,13 @@ impl Vm {
 
     fn current_frame(&mut self) -> &mut CallFrame {
         self.frames.top()
+    }
+
+    fn read_string(&mut self) -> GcRef<LoxString> {
+        match self.current_frame().read_constant() {
+            Value::String(name) => name,
+            _ => unreachable!(),
+        }
     }
 
     fn binary_op(&mut self, f: impl Fn(f64, f64) -> Value) -> Result<()> {
@@ -377,6 +379,37 @@ impl Vm {
                 callee
             )),
         }
+    }
+
+    fn invoke_from_class(
+        &mut self,
+        class: GcRef<Class>,
+        name: GcRef<LoxString>,
+        arg_count: usize,
+    ) -> Result<()> {
+        if let Some(method) = class.methods.get(name) {
+            match method {
+                Value::Closure(closure) => self.call(closure, arg_count),
+                _ => unreachable!(),
+            }
+        } else {
+            self.runtime_error(&format!("Undefined property '{}'", name.as_str()))
+        }
+    }
+
+    fn invoke(&mut self, name: GcRef<LoxString>, arg_count: usize) -> Result<()> {
+        let receiver = *self.stack.peek(arg_count);
+        let instance = match receiver {
+            Value::Instance(instance) => instance,
+            _ => return self.runtime_error("Only instances have methods."),
+        };
+
+        if let Some(value) = instance.fields.get(name) {
+            self.stack.write(self.stack.get_offset(), value);
+            return self.call_value(value, arg_count);
+        }
+
+        self.invoke_from_class(instance.class, name, arg_count)
     }
 
     fn bind_method(&mut self, class: GcRef<Class>, name: GcRef<LoxString>) -> Result<()> {

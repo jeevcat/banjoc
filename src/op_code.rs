@@ -51,4 +51,5 @@ pub enum OpCode {
     GetProperty,
     SetProperty,
     Method,
+    Invoke,
 }

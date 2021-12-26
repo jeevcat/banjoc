@@ -424,13 +424,17 @@ impl<'source> Parser<'source> {
         self.emit_instruction(OpCode::Call, arg_count);
     }
 
-    fn dot(&mut self, _can_assign: bool) {
+    fn dot(&mut self, can_assign: bool) {
         self.consume(TokenType::Identifier, "Expect property name after '.'.");
         let name = self.identifier_constant(self.previous);
 
-        if _can_assign && self.advance_matching(TokenType::Equal) {
+        if can_assign && self.advance_matching(TokenType::Equal) {
             self.expression();
             self.emit_instruction(OpCode::SetProperty, name);
+        } else if self.advance_matching(TokenType::LeftParen) {
+            let arg_count = self.argument_list();
+            self.emit_instruction(OpCode::Invoke, name);
+            self.emit_byte(arg_count);
         } else {
             self.emit_instruction(OpCode::GetProperty, name);
         }

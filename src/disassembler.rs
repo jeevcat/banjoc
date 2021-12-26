@@ -83,6 +83,7 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> usize {
             OpCode::GetProperty => constant_instruction("OP_GET_PROPERTY", chunk, offset),
             OpCode::SetProperty => constant_instruction("OP_SET_PROPERTY", chunk, offset),
             OpCode::Method => constant_instruction("OP_METHOD", chunk, offset),
+            OpCode::Invoke => invoke_instruction("OP_INVOKE", chunk, offset),
         },
         Err(_) => {
             println!("Unknown opcode {}", byte);
@@ -103,6 +104,16 @@ fn constant_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
         name, constant, chunk.constants[constant]
     );
     offset + 2
+}
+
+fn invoke_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
+    let constant = chunk.code[offset + 1] as usize;
+    let arg_count = chunk.code[offset + 2] as usize;
+    println!(
+        "{:-16} {:4} '{}' ({} args)",
+        name, constant, chunk.constants[constant], arg_count,
+    );
+    offset + 3
 }
 
 fn byte_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
