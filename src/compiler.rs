@@ -2,13 +2,15 @@ use crate::{
     error::{LoxError, Result},
     gc::GcRef,
     obj::{Function, LoxString},
-    scanner::Token,
+    scanner::{Token, TokenType},
 };
 
 #[derive(Clone, Copy)]
 pub enum FunctionType {
     Script,
     Function,
+    Method,
+    Initializer,
 }
 
 /// A compiler for a function, including the implicit top-level function, <script>
@@ -42,12 +44,19 @@ impl<'source> Compiler<'source> {
             is_local: false,
         };
 
+        let mut locals = [INIT_LOCAL; Compiler::MAX_LOCAL_COUNT];
         // Claim stack slot zero for the VM's own internal use
+        locals[0].depth = Some(0);
+        if !matches!(function_type, FunctionType::Function) {
+            locals[0].name.token_type = TokenType::This;
+            locals[0].name.lexeme = "this";
+        }
+
         let local_count = 1;
 
         Self {
             enclosing: None,
-            locals: [INIT_LOCAL; Compiler::MAX_LOCAL_COUNT],
+            locals,
             upvalues: [INIT_UPVALUE; Compiler::MAX_UPVALUE_COUNT],
             function: Function::new(function_name),
             function_type,
@@ -187,6 +196,10 @@ impl<'source> Compiler<'source> {
         }
         false
     }
+}
+
+pub struct ClassCompiler {
+    pub enclosing: Option<Box<ClassCompiler>>,
 }
 
 pub struct Local<'source> {

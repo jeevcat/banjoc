@@ -7,7 +7,7 @@ use strum::{EnumCount, IntoEnumIterator};
 
 use crate::{
     chunk::Chunk,
-    compiler::{Compiler, FunctionType},
+    compiler::{ClassCompiler, Compiler, FunctionType},
     error::{LoxError, Result},
     gc::{Gc, GcRef},
     obj::Function,
@@ -36,7 +36,9 @@ pub fn compile(source: &str, vm: &mut Gc) -> Result<GcRef<Function>> {
 
 struct Parser<'source> {
     scanner: Scanner<'source>,
+    // TODO: this should be an option
     compiler: Box<Compiler<'source>>,
+    class_compiler: Option<Box<ClassCompiler>>,
     current: Token<'source>,
     previous: Token<'source>,
     gc: &'source mut Gc,
@@ -52,6 +54,7 @@ impl<'source> Parser<'source> {
         Self {
             scanner,
             compiler: Box::new(Compiler::new(FunctionType::Script, None)),
+            class_compiler: None,
             current: Token::none(),
             previous: Token::none(),
             gc,
@@ -155,7 +158,11 @@ impl<'source> Parser<'source> {
         self.consume(TokenType::Identifier, "Expect method name.");
         let constant = self.identifier_constant(self.previous);
 
-        let function_type = FunctionType::Function;
+        let function_type = if self.previous.lexeme == "init" {
+            FunctionType::Initializer
+        } else {
+            FunctionType::Method
+        };
         self.function(function_type);
 
         self.emit_instruction(OpCode::Method, constant);
@@ -170,6 +177,10 @@ impl<'source> Parser<'source> {
         self.emit_instruction(OpCode::Class, name_constant);
         self.define_variable(name_constant);
 
+        self.class_compiler = Some(Box::new(ClassCompiler {
+            enclosing: self.class_compiler.take(),
+        }));
+
         if let Err(err) = self.named_variable(class_name, false) {
             self.error(err);
         }
@@ -180,6 +191,8 @@ impl<'source> Parser<'source> {
         }
         self.consume(TokenType::RightBrace, "Expect '}' after class body");
         self.emit_opcode(OpCode::Pop);
+
+        self.class_compiler = self.class_compiler.as_mut().unwrap().enclosing.take();
     }
 
     fn fun_declaration(&mut self) {
@@ -361,6 +374,9 @@ impl<'source> Parser<'source> {
         if self.advance_matching(TokenType::Semicolon) {
             self.emit_return();
         } else {
+            if let FunctionType::Initializer = self.compiler.function_type {
+                self.error_str("Can't return a value from an initializer")
+            }
             self.expression();
             self.consume(TokenType::Semicolon, "Expect ';' after return value.");
             self.emit_opcode(OpCode::Return);
@@ -512,6 +528,14 @@ impl<'source> Parser<'source> {
         if let Err(err) = self.named_variable(self.previous, can_assign) {
             self.error(err)
         }
+    }
+
+    fn this(&mut self, _can_assign: bool) {
+        if self.class_compiler.is_none() {
+            self.error_str("Can't use 'this' outside of a class.");
+            return;
+        }
+        self.variable(false)
     }
 
     fn named_variable(&mut self, name: Token, can_assign: bool) -> Result<()> {
@@ -703,7 +727,10 @@ impl<'source> Parser<'source> {
     }
 
     fn emit_return(&mut self) {
-        self.emit_opcode(OpCode::Nil);
+        match self.compiler.function_type {
+            FunctionType::Initializer => self.emit_instruction(OpCode::GetLocal, 0),
+            _ => self.emit_opcode(OpCode::Nil),
+        }
         self.emit_opcode(OpCode::Return);
     }
 
@@ -895,7 +922,7 @@ impl<'source> ParseRuleTable<'source> {
             Print =>        ParseRule::new(None,                   None,                 P::None),
             Return =>       ParseRule::new(None,                   None,                 P::None),
             Super =>        ParseRule::new(None,                   None,                 P::None),
-            This =>         ParseRule::new(None,                   None,                 P::None),
+            This =>         ParseRule::new(Some(Parser::this),     None,                 P::None),
             True =>         ParseRule::new(Some(Parser::literal),  None,                 P::None),
             Var =>          ParseRule::new(None,                   None,                 P::None),
             While =>        ParseRule::new(None,                   None,                 P::None),

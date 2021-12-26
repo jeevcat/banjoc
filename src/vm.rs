@@ -22,6 +22,7 @@ pub struct Vm {
     frames: Stack<CallFrame, { Vm::FRAMES_MAX }>,
     globals: Table,
     open_upvalues: Option<GcRef<Upvalue>>,
+    init_string: GcRef<LoxString>,
 }
 
 impl Vm {
@@ -29,12 +30,16 @@ impl Vm {
     const STACK_MAX: usize = Self::FRAMES_MAX * 8;
 
     pub fn new() -> Vm {
+        let mut gc = Gc::new();
+        let init_string = gc.intern("init".to_string());
+
         let mut vm = Vm {
-            gc: Gc::new(),
+            gc,
             stack: Stack::new(),
             frames: Stack::new(),
             globals: Table::new(),
             open_upvalues: None,
+            init_string,
         };
 
         vm.define_native("clock", |_| {
@@ -346,10 +351,26 @@ impl Vm {
             Value::Closure(callee) => self.call(callee, arg_count),
             Value::Class(class) => {
                 let instance = self.alloc(Instance::new(class));
-                self.stack.push(Value::Instance(instance));
+                self.stack.write(
+                    self.stack.get_offset() - arg_count,
+                    Value::Instance(instance),
+                );
+                if let Some(initializer) = class.methods.get(self.init_string) {
+                    match initializer {
+                        Value::Closure(initializer) => return self.call(initializer, arg_count),
+                        _ => unreachable!(),
+                    }
+                } else if arg_count != 0 {
+                    return self
+                        .runtime_error(&format!("Expected 0 arguments but got {}", arg_count));
+                }
                 Ok(())
             }
-            Value::BoundMethod(bound) => self.call(bound.method, arg_count),
+            Value::BoundMethod(bound) => {
+                self.stack
+                    .write(self.stack.get_offset() - arg_count, bound.receiver);
+                self.call(bound.method, arg_count)
+            }
 
             _ => self.runtime_error(&format!(
                 "Can only call functions and classes, not on '{}'.",
@@ -443,6 +464,7 @@ impl Vm {
             _ => unreachable!(),
         };
         class.methods.insert(name, method);
+        self.stack.pop();
     }
 
     fn runtime_error(&self, message: &str) -> Result<()> {
