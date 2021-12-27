@@ -394,7 +394,7 @@ impl Vm {
                     }
                 } else if arg_count != 0 {
                     return self
-                        .runtime_error(&format!("Expected 0 arguments but got {}", arg_count));
+                        .runtime_error(&format!("Expected 0 arguments but got {}.", arg_count));
                 }
                 Ok(())
             }
@@ -404,10 +404,7 @@ impl Vm {
                 self.call(bound.method, arg_count)
             }
 
-            _ => self.runtime_error(&format!(
-                "Can only call functions and classes, not on '{}'.",
-                callee
-            )),
+            _ => self.runtime_error("Can only call functions and classes."),
         }
     }
 
@@ -423,7 +420,7 @@ impl Vm {
                 _ => unreachable!(),
             }
         } else {
-            self.runtime_error(&format!("Undefined property '{}'", name.as_str()))
+            self.runtime_error(&format!("Undefined property '{}'.", name.as_str()))
         }
     }
 

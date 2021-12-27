@@ -125,7 +125,7 @@ impl<'source> Parser<'source> {
                 self.compiler.function.arity += 1;
 
                 if self.compiler.function.arity > 255 {
-                    self.error_at_current("Can't have more than 255 parameters");
+                    self.error_at_current("Can't have more than 255 parameters.");
                 }
                 let constant = self.parse_variable("Expect parameter name");
                 self.define_variable(constant);
@@ -399,7 +399,7 @@ impl<'source> Parser<'source> {
             self.emit_return();
         } else {
             if let FunctionType::Initializer = self.compiler.function_type {
-                self.error_str("Can't return a value from an initializer")
+                self.error_str("Can't return a value from an initializer.")
             }
             self.expression();
             self.consume(TokenType::Semicolon, "Expect ';' after return value.");
@@ -829,7 +829,7 @@ impl<'source> Parser<'source> {
         // +2: take into account the size of the 2-byte Loop operand
         let offset = self.current_chunk().code.len() - loop_start + 2;
         if offset > u16::MAX as usize {
-            self.error_str("Loop body too large");
+            self.error_str("Loop body too large.");
         }
 
         let (byte1, byte2) = to_bytes(offset as u16);

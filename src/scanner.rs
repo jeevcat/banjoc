@@ -49,7 +49,7 @@ impl<'source> Scanner<'source> {
             b'"' => self.string(),
             c if c.is_ascii_digit() => self.number(),
             c if c.is_ascii_alphabetic() || c == b'_' => self.identifier(),
-            _ => self.error_token("Unexpected character"),
+            _ => self.error_token("Unexpected character."),
         }
     }
 
