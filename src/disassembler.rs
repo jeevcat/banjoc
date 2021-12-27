@@ -1,5 +1,6 @@
 use crate::{chunk::Chunk, op_code::OpCode, value::Value};
 
+#[cfg(feature = "debug_print_code")]
 pub fn disassemble(chunk: &Chunk, name: &str) {
     println!("== {} ==", name);
     let mut offset = 0;

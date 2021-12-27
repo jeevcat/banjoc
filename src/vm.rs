@@ -426,17 +426,17 @@ impl Vm {
 
     fn invoke(&mut self, name: GcRef<LoxString>, arg_count: usize) -> Result<()> {
         let receiver = *self.stack.peek(arg_count);
-        let instance = match receiver {
+        let receiver = match receiver {
             Value::Instance(instance) => instance,
             _ => return self.runtime_error("Only instances have methods."),
         };
 
-        if let Some(value) = instance.fields.get(name) {
-            self.stack.write(self.stack.get_offset(), value);
+        if let Some(value) = receiver.fields.get(name) {
+            self.stack.write(self.stack.get_offset() - arg_count, value);
             return self.call_value(value, arg_count);
         }
 
-        self.invoke_from_class(instance.class, name, arg_count)
+        self.invoke_from_class(receiver.class, name, arg_count)
     }
 
     fn bind_method(&mut self, class: GcRef<Class>, name: GcRef<LoxString>) -> Result<()> {
