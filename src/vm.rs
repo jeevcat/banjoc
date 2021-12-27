@@ -27,7 +27,7 @@ pub struct Vm {
 
 impl Vm {
     const FRAMES_MAX: usize = 64;
-    const STACK_MAX: usize = Self::FRAMES_MAX * 8;
+    const STACK_MAX: usize = Self::FRAMES_MAX * (u8::MAX as usize + 1);
 
     pub fn new() -> Vm {
         let mut gc = Gc::new();

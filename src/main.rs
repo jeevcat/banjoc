@@ -47,8 +47,7 @@ fn run_file(vm: &mut Vm, path: &str) {
     };
     if let Err(error) = vm.interpret(&code) {
         match error {
-            LoxError::CompileError(message) => {
-                eprintln!("Compile error: {}", message);
+            LoxError::CompileError(_) => {
                 process::exit(65);
             }
             LoxError::RuntimeError => {

@@ -102,7 +102,7 @@ impl<'source> Scanner<'source> {
     }
 
     fn string(&mut self) -> Token<'source> {
-        while self.peek() != b'"' && !self.is_at_end() {
+        while !self.is_at_end() && self.peek() != b'"' {
             if self.peek() == b'\n' {
                 self.line += 1;
             }
