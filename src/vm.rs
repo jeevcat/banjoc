@@ -478,23 +478,23 @@ impl Vm {
 
     fn capture_upvalue(&mut self, local: usize) -> GcRef<Upvalue> {
         let mut prev_upvalue = None;
-        let mut upvalue = self.open_upvalues;
-        while let Some(inner) = upvalue {
-            if inner.location <= local {
+        let mut maybe_upvalue = self.open_upvalues;
+        while let Some(upvalue) = maybe_upvalue {
+            if upvalue.location <= local {
                 break;
             }
-            prev_upvalue = upvalue;
-            upvalue = inner.next;
+            prev_upvalue = maybe_upvalue;
+            maybe_upvalue = upvalue.next;
         }
 
         // We found an existing upvalue capturing the variable, so we reuse that upvalue
-        if let Some(upvalue) = upvalue {
+        if let Some(upvalue) = maybe_upvalue {
             if upvalue.location == local {
                 return upvalue;
             }
         }
 
-        let created_upvalue = Upvalue::new(local);
+        let created_upvalue = Upvalue::new(local, maybe_upvalue);
         let created_upvalue = self.alloc(created_upvalue);
 
         // Insert new upvalue between 'prev_upvalue' and 'upvalue'

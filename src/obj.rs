@@ -147,12 +147,12 @@ pub struct Upvalue {
 }
 
 impl Upvalue {
-    pub fn new(location: usize) -> Self {
+    pub fn new(location: usize, next: Option<GcRef<Upvalue>>) -> Self {
         Self {
             header: ObjHeader::new(ObjectType::Upvalue),
             location,
             closed: None,
-            next: None,
+            next,
         }
     }
 

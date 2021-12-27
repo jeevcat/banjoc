@@ -19,7 +19,7 @@
                     "kind": "bin"
                 }
             },
-            "args": ["../craftinginterpreters/test/number/decimal_point_at_eof.lox"],
+            "args": [],
             "cwd": "${workspaceFolder}"
         },
         {
