@@ -44,6 +44,9 @@ impl PartialEq for Value {
             (Value::Function(a), Value::Function(b)) => a == b,
             (Value::NativeFunction(a), Value::NativeFunction(b)) => a == b,
             (Value::Closure(a), Value::Closure(b)) => a == b,
+            (Value::Class(a), Value::Class(b)) => a == b,
+            (Value::Instance(a), Value::Instance(b)) => a == b,
+            (Value::BoundMethod(a), Value::BoundMethod(b)) => a == b,
             _ => false,
         }
     }
