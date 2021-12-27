@@ -52,4 +52,7 @@ pub enum OpCode {
     SetProperty,
     Method,
     Invoke,
+    Inherit,
+    GetSuper,
+    SuperInvoke,
 }

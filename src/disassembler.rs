@@ -84,6 +84,9 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> usize {
             OpCode::SetProperty => constant_instruction("OP_SET_PROPERTY", chunk, offset),
             OpCode::Method => constant_instruction("OP_METHOD", chunk, offset),
             OpCode::Invoke => invoke_instruction("OP_INVOKE", chunk, offset),
+            OpCode::Inherit => simple_instruction("OP_INHERIT", offset),
+            OpCode::GetSuper => constant_instruction("OP_GET_SUPER", chunk, offset),
+            OpCode::SuperInvoke => invoke_instruction("OP_SUPER_INVOKE", chunk, offset),
         },
         Err(_) => {
             println!("Unknown opcode {}", byte);

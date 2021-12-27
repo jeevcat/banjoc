@@ -231,6 +231,22 @@ impl<'source> Token<'source> {
             line: 0,
         }
     }
+
+    pub const fn this() -> Token<'source> {
+        Token {
+            token_type: TokenType::This,
+            lexeme: "this",
+            line: 0,
+        }
+    }
+
+    pub const fn super_() -> Token<'source> {
+        Token {
+            token_type: TokenType::Super,
+            lexeme: "super",
+            line: 0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, IntoPrimitive, EnumIter, EnumCount)]

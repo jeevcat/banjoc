@@ -200,6 +200,16 @@ impl<'source> Compiler<'source> {
 
 pub struct ClassCompiler {
     pub enclosing: Option<Box<ClassCompiler>>,
+    pub has_superclass: bool,
+}
+
+impl ClassCompiler {
+    pub fn new(enclosing: Option<Box<ClassCompiler>>) -> Self {
+        Self {
+            enclosing,
+            has_superclass: false,
+        }
+    }
 }
 
 pub struct Local<'source> {

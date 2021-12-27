@@ -310,6 +310,36 @@ impl Vm {
                         let arg_count = self.current_frame().read_byte() as usize;
                         self.invoke(method, arg_count)?;
                     }
+                    OpCode::Inherit => {
+                        let superclass = match self.stack.peek(1) {
+                            Value::Class(class) => class,
+                            _ => return self.runtime_error("Superclass must be a class."),
+                        };
+                        match self.stack.peek(0) {
+                            Value::Class(mut subclass) => {
+                                subclass.methods.append(&superclass.methods)
+                            }
+                            _ => unreachable!(),
+                        };
+                    }
+                    OpCode::GetSuper => {
+                        let name = self.read_string();
+                        let class = match self.stack.pop() {
+                            Value::Class(class) => class,
+                            _ => unreachable!(),
+                        };
+
+                        self.bind_method(class, name)?;
+                    }
+                    OpCode::SuperInvoke => {
+                        let method = self.read_string();
+                        let arg_count = self.current_frame().read_byte() as usize;
+                        let class = match self.stack.pop() {
+                            Value::Class(class) => class,
+                            _ => unreachable!(),
+                        };
+                        self.invoke_from_class(class, method, arg_count)?;
+                    }
                 }
             }
         }

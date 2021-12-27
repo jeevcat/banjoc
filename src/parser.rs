@@ -177,13 +177,33 @@ impl<'source> Parser<'source> {
         self.emit_instruction(OpCode::Class, name_constant);
         self.define_variable(name_constant);
 
-        self.class_compiler = Some(Box::new(ClassCompiler {
-            enclosing: self.class_compiler.take(),
-        }));
+        self.class_compiler = Some(Box::new(ClassCompiler::new(self.class_compiler.take())));
 
-        if let Err(err) = self.named_variable(class_name, false) {
-            self.error(err);
+        // Inheritence
+        if self.advance_matching(TokenType::Less) {
+            self.consume(TokenType::Identifier, "Expect superclass name.");
+            self.variable(false);
+
+            if class_name.lexeme == self.previous.lexeme {
+                self.error_str("A class can't inherit from itself.");
+            }
+
+            self.unassignable_named_variable(class_name);
+
+            self.begin_scope();
+            self.add_local(Token {
+                token_type: TokenType::Super,
+                lexeme: "super",
+                line: 0,
+            });
+            self.define_variable(0);
+
+            self.emit_opcode(OpCode::Inherit);
+            self.class_compiler.as_mut().unwrap().has_superclass = true;
         }
+
+        self.unassignable_named_variable(class_name);
+
         self.consume(TokenType::LeftBrace, "Expect '{' before class body");
         while !self.check(TokenType::RightBrace) && !self.check(TokenType::Eof) {
             // Lox doesn't have field declarations -> everything between the braces must be a method
@@ -191,6 +211,10 @@ impl<'source> Parser<'source> {
         }
         self.consume(TokenType::RightBrace, "Expect '}' after class body");
         self.emit_opcode(OpCode::Pop);
+
+        if self.class_compiler.as_ref().unwrap().has_superclass {
+            self.end_scope();
+        }
 
         self.class_compiler = self.class_compiler.as_mut().unwrap().enclosing.take();
     }
@@ -542,6 +566,31 @@ impl<'source> Parser<'source> {
         self.variable(false)
     }
 
+    fn super_(&mut self, _can_assign: bool) {
+        if let Some(class_compiler) = &self.class_compiler {
+            if !class_compiler.has_superclass {
+                self.error_str("Can't use 'super' in a class with no superclass.");
+            }
+        } else {
+            self.error_str("Can't use 'super' outside of a class.");
+        }
+
+        self.consume(TokenType::Dot, "Expect '.' after 'super'.");
+        self.consume(TokenType::Identifier, "Expect superclass method name.");
+        let name = self.identifier_constant(self.previous);
+
+        self.unassignable_named_variable(Token::this());
+        if self.advance_matching(TokenType::LeftParen) {
+            let arg_count = self.argument_list();
+            self.unassignable_named_variable(Token::super_());
+            self.emit_instruction(OpCode::SuperInvoke, name);
+            self.emit_byte(arg_count);
+        } else {
+            self.unassignable_named_variable(Token::super_());
+            self.emit_instruction(OpCode::GetSuper, name);
+        }
+    }
+
     fn named_variable(&mut self, name: Token, can_assign: bool) -> Result<()> {
         let (operand, get_opcode, set_opcode) = {
             if let Some(arg) = self.compiler.resolve_local(name)? {
@@ -561,6 +610,12 @@ impl<'source> Parser<'source> {
             self.emit_instruction(get_opcode, operand);
         }
         Ok(())
+    }
+
+    fn unassignable_named_variable(&mut self, name: Token) {
+        if let Err(err) = self.named_variable(name, false) {
+            self.error(err);
+        }
     }
 
     /// Starts at the current token and parses any expression at the given precedence or higher
@@ -925,7 +980,7 @@ impl<'source> ParseRuleTable<'source> {
             Or =>           ParseRule::new(None,                   Some(Parser::or),     P::Or),
             Print =>        ParseRule::new(None,                   None,                 P::None),
             Return =>       ParseRule::new(None,                   None,                 P::None),
-            Super =>        ParseRule::new(None,                   None,                 P::None),
+            Super =>        ParseRule::new(Some(Parser::super_),   None,                 P::None),
             This =>         ParseRule::new(Some(Parser::this),     None,                 P::None),
             True =>         ParseRule::new(Some(Parser::literal),  None,                 P::None),
             Var =>          ParseRule::new(None,                   None,                 P::None),
