@@ -852,6 +852,9 @@ impl<'source> Parser<'source> {
     }
 
     fn error_at(&mut self, token: Token, message: &str) {
+        if self.panic_mode {
+            return;
+        }
         self.panic_mode = true;
         eprint!("[line {}] Error", token.line);
 

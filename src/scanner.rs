@@ -119,12 +119,12 @@ impl<'source> Scanner<'source> {
     }
 
     fn number(&mut self) -> Token<'source> {
-        while self.peek().is_ascii_digit() {
+        while !self.is_at_end() && self.peek().is_ascii_digit() {
             self.advance();
         }
 
         // Look for a fractional part
-        if self.peek() == b'.' && self.peek_next().is_ascii_digit() {
+        if !self.is_at_end() && self.peek() == b'.' && self.peek_next().is_ascii_digit() {
             // Consume the '.'
             self.advance();
 
@@ -190,7 +190,11 @@ impl<'source> Scanner<'source> {
     }
 
     fn peek_next(&self) -> u8 {
-        self.source.as_bytes()[self.current + 1]
+        if self.current + 1 >= self.source.len() {
+            b'\0'
+        } else {
+            self.source.as_bytes()[self.current + 1]
+        }
     }
 
     fn is_at_end(&self) -> bool {
