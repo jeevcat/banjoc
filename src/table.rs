@@ -87,7 +87,7 @@ impl Table {
             return None;
         }
 
-        let mut index = hash as usize % self.entries.len();
+        let mut index = hash as usize & (self.capacity() - 1);
 
         loop {
             let entry = &self.entries[index];
@@ -108,7 +108,7 @@ impl Table {
                     }
                 }
             }
-            index = (index + 1) % self.capacity();
+            index = (index + 1) & (self.capacity() - 1);
         }
     }
 
@@ -153,7 +153,7 @@ impl Table {
 }
 
 fn find_entry(entries: &[Entry], key: GcRef<LoxString>) -> &Entry {
-    let mut index = key.hash as usize % entries.len();
+    let mut index = key.hash as usize & (entries.len() - 1);
     // The first seen tombstone
     let mut tombstone = None;
 
@@ -184,13 +184,13 @@ fn find_entry(entries: &[Entry], key: GcRef<LoxString>) -> &Entry {
         }
 
         // Collision: linear probe
-        index = (index + 1) % entries.len();
+        index = (index + 1) & (entries.len() - 1);
     }
 }
 
 fn find_entry_mut(entries: &mut [Entry], key: GcRef<LoxString>) -> &mut Entry {
     let len = entries.len();
-    let mut index = key.hash as usize % len;
+    let mut index = key.hash as usize & (len - 1);
     // The first seen tombstone
     let mut tombstone = None;
 
@@ -221,7 +221,7 @@ fn find_entry_mut(entries: &mut [Entry], key: GcRef<LoxString>) -> &mut Entry {
         }
 
         // Collision: linear probe
-        index = (index + 1) % len;
+        index = (index + 1) & (len - 1);
     }
 }
 
