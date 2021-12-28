@@ -2,6 +2,7 @@ use crate::{
     error::{LoxError, Result},
     gc::GcRef,
     obj::{Function, FunctionUpvalue, LoxString},
+    op_code::{LocalIndex, UpvalueIndex},
     scanner::{Token, TokenType},
 };
 
@@ -85,13 +86,13 @@ impl<'source> Compiler<'source> {
     }
 
     /// Returns the upvalue index
-    fn add_upvalue(&mut self, index: u8, is_local: bool) -> Result<usize> {
+    fn add_upvalue(&mut self, index: u8, is_local: bool) -> Result<UpvalueIndex> {
         // Search for the upvalue first, for cases where closure references variable in surounding function multiple times
         let count = self.function.upvalues.len();
         for i in 0..count {
             let upvalue = &self.function.upvalues[i];
             if upvalue.index == index && upvalue.is_local == is_local {
-                return Ok(i);
+                return Ok(i as UpvalueIndex);
             }
         }
 
@@ -103,7 +104,7 @@ impl<'source> Compiler<'source> {
 
         let upvalue = FunctionUpvalue { index, is_local };
         self.function.upvalues.push(upvalue);
-        Ok(count)
+        Ok(count as UpvalueIndex)
     }
 
     pub fn mark_var_initialized(&mut self) {
@@ -119,7 +120,7 @@ impl<'source> Compiler<'source> {
         self.local_count -= 1;
     }
 
-    pub fn resolve_local(&mut self, name: Token) -> Result<Option<usize>> {
+    pub fn resolve_local(&mut self, name: Token) -> Result<Option<LocalIndex>> {
         for i in (0..self.local_count).rev() {
             let local = &self.locals[i];
             if name.lexeme == local.name.lexeme {
@@ -128,18 +129,18 @@ impl<'source> Compiler<'source> {
                         "Can't read local variable in its own initializer.",
                     ))
                 } else {
-                    Ok(Some(i))
+                    Ok(Some(i as u8))
                 };
             }
         }
         Ok(None)
     }
 
-    pub fn resolve_upvalue(&mut self, name: Token) -> Result<Option<usize>> {
+    pub fn resolve_upvalue(&mut self, name: Token) -> Result<Option<UpvalueIndex>> {
         Ok(if let Some(enclosing) = self.enclosing.as_mut() {
-            if let Some(local) = enclosing.resolve_local(name)? {
-                enclosing.locals[local].is_captured = true;
-                Some(self.add_upvalue(local as u8, true)?)
+            if let Some(index) = enclosing.resolve_local(name)? {
+                enclosing.locals[index as usize].is_captured = true;
+                Some(self.add_upvalue(index, true)?)
             } else if let Some(upvalue) = enclosing.resolve_upvalue(name)? {
                 Some(self.add_upvalue(upvalue as u8, false)?)
             } else {

@@ -4,7 +4,7 @@ pub struct Constant {
 }
 
 impl Constant {
-    pub fn none() -> Self {
+    pub const fn none() -> Self {
         Self { slot: 0 }
     }
 }
@@ -14,6 +14,20 @@ pub struct Invoke {
     pub name: Constant,
     pub arg_count: u8,
 }
+
+#[derive(Clone, Copy)]
+pub struct Jump {
+    pub offset: u16,
+}
+
+impl Jump {
+    pub const fn none() -> Self {
+        Self { offset: 0xffff }
+    }
+}
+
+pub type LocalIndex = u8;
+pub type UpvalueIndex = u8;
 
 #[derive(Clone, Copy)]
 pub enum OpCode {
@@ -46,17 +60,19 @@ pub enum OpCode {
     GetGlobal(Constant),
     SetGlobal(Constant),
 
-    GetLocal(u8),
-    SetLocal(u8),
+    GetLocal(LocalIndex),
+    SetLocal(LocalIndex),
 
-    GetUpvalue(u8),
-    SetUpvalue(u8),
+    GetUpvalue(UpvalueIndex),
+    SetUpvalue(UpvalueIndex),
 
-    JumpIfFalse(u16),
-    Jump(u16),
-    Loop(u16),
+    JumpIfFalse(Jump),
+    Jump(Jump),
+    Loop(Jump),
 
-    Call(u8),
+    Call {
+        arg_count: u8,
+    },
     Closure(Constant),
     CloseUpvalue,
 

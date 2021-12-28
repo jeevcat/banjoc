@@ -1,6 +1,6 @@
 use crate::{
     chunk::Chunk,
-    op_code::{Constant, Invoke, OpCode},
+    op_code::{Constant, Invoke, Jump, LocalIndex, OpCode},
 };
 
 #[cfg(feature = "debug_print_code")]
@@ -54,12 +54,12 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> usize {
         OpCode::SetGlobal(constant) => {
             constant_instruction("OP_SET_GLOBAL", chunk, offset, constant)
         }
-        OpCode::GetLocal(slot) => byte_instruction("OP_GET_LOCAL", offset, slot),
-        OpCode::SetLocal(slot) => byte_instruction("OP_SET_LOCAL", offset, slot),
+        OpCode::GetLocal(LocalIndex { index }) => byte_instruction("OP_GET_LOCAL", offset, index),
+        OpCode::SetLocal(LocalIndex { index }) => byte_instruction("OP_SET_LOCAL", offset, index),
         OpCode::JumpIfFalse(jump) => jump_instruction("OP_JUMP_IF_FALSE", 1, offset, jump),
         OpCode::Jump(jump) => jump_instruction("OP_JUMP", 1, offset, jump),
         OpCode::Loop(jump) => jump_instruction("OP_LOOP", -1, offset, jump),
-        OpCode::Call(slot) => byte_instruction("OP_CALL", offset, slot),
+        OpCode::Call { arg_count } => byte_instruction("OP_CALL", offset, arg_count),
         OpCode::Closure(constant) => constant_instruction("OP_CLOSURE", chunk, offset, constant),
         OpCode::GetUpvalue(slot) => byte_instruction("OP_GET_UPVALUE", offset, slot),
         OpCode::SetUpvalue(slot) => byte_instruction("OP_SET_UPVALUE", offset, slot),
@@ -105,12 +105,12 @@ fn byte_instruction(name: &str, offset: usize, slot: u8) -> usize {
     offset + 1
 }
 
-fn jump_instruction(name: &str, sign: isize, offset: usize, jump: u16) -> usize {
+fn jump_instruction(name: &str, sign: isize, offset: usize, jump: Jump) -> usize {
     println!(
         "{:-16} {:4} -> {}",
         name,
         offset,
-        offset as isize + 3 + sign * jump as isize
+        offset as isize + 3 + sign * jump.offset as isize
     );
     offset + 1
 }

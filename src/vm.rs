@@ -11,7 +11,7 @@ use crate::{
         BoundMethod, Class, Closure, FunctionUpvalue, Instance, LoxString, NativeFn,
         NativeFunction, Upvalue,
     },
-    op_code::{Constant, Invoke},
+    op_code::{Constant, Invoke, Jump, LocalIndex},
     parser,
     stack::Stack,
     table::Table,
@@ -205,21 +205,20 @@ impl Vm {
                     let offset = self.current_frame().read_local_offset(offset);
                     self.stack.write(offset, *self.stack.peek(0));
                 }
-                OpCode::JumpIfFalse(offset) => {
+                OpCode::JumpIfFalse(jump) => {
                     if self.stack.peek(0).is_falsey() {
-                        self.current_frame().apply_offset(offset as isize);
+                        self.current_frame().jump(jump);
                     }
                 }
-                OpCode::Jump(offset) => {
+                OpCode::Jump(jump) => {
                     let frame = self.current_frame();
-                    frame.apply_offset(offset as isize);
+                    frame.jump(jump);
                 }
-                OpCode::Loop(offset) => {
+                OpCode::Loop(jump) => {
                     let frame = self.current_frame();
-                    let offset = -1 - (offset as isize);
-                    frame.apply_offset(offset);
+                    frame.jump_backwards(jump);
                 }
-                OpCode::Call(arg_count) => {
+                OpCode::Call { arg_count } => {
                     let arg_count = arg_count as usize;
                     self.call_value(*self.stack.peek(arg_count), arg_count)?;
                 }
@@ -249,13 +248,13 @@ impl Vm {
                         unreachable!()
                     }
                 }
-                OpCode::GetUpvalue(slot) => {
-                    let upvalue = self.current_frame().closure.upvalues[slot as usize];
+                OpCode::GetUpvalue(index) => {
+                    let upvalue = self.current_frame().closure.upvalues[index as usize];
                     let value = upvalue.read(&self.stack);
                     self.stack.push(value);
                 }
-                OpCode::SetUpvalue(slot) => {
-                    let mut upvalue = self.current_frame().closure.upvalues[slot as usize];
+                OpCode::SetUpvalue(index) => {
+                    let mut upvalue = self.current_frame().closure.upvalues[index as usize];
                     upvalue.write(&mut self.stack);
                 }
                 OpCode::CloseUpvalue => {
@@ -619,11 +618,16 @@ impl CallFrame {
         self.closure.function.chunk.constants[constant.slot as usize]
     }
 
-    fn read_local_offset(&mut self, offset: u8) -> usize {
-        self.slot + (offset as usize)
+    fn read_local_offset(&mut self, local: LocalIndex) -> usize {
+        self.slot + (local as usize)
     }
 
-    fn apply_offset(&mut self, offset: isize) {
+    fn jump(&mut self, jump: Jump) {
+        self.ip = unsafe { self.ip.offset(jump.offset as isize) };
+    }
+
+    fn jump_backwards(&mut self, jump: Jump) {
+        let offset = -1 - (jump.offset as isize);
         self.ip = unsafe { self.ip.offset(offset) };
     }
 }

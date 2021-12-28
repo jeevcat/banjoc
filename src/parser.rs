@@ -11,7 +11,7 @@ use crate::{
     error::{LoxError, Result},
     gc::{Gc, GcRef},
     obj::Function,
-    op_code::{Constant, Invoke, OpCode},
+    op_code::{Constant, Invoke, Jump, OpCode},
     scanner::{Scanner, Token, TokenType},
     value::Value,
 };
@@ -275,13 +275,13 @@ impl<'source> Parser<'source> {
         self.expression();
         self.consume(TokenType::RightParen, "Expect ')' after condition.");
 
-        let then_jump = self.emit_jump(OpCode::JumpIfFalse(0xffff));
+        let then_jump = self.emit_jump(OpCode::JumpIfFalse(Jump::none()));
         // If we didn't jump ('if' expression was true), then pop the result of the expression before executing 'if' body
         self.emit(OpCode::Pop);
 
         self.statement();
 
-        let else_jump = self.emit_jump(OpCode::Jump(0xffff));
+        let else_jump = self.emit_jump(OpCode::Jump(Jump::none()));
 
         self.patch_jump(then_jump);
         // If we did jump above ('if' expression was false), then pop the result of the expression before executing 'else' body (even if the else body is empty)
@@ -299,7 +299,7 @@ impl<'source> Parser<'source> {
         self.expression();
         self.consume(TokenType::RightParen, "Expect ')' after condition.");
 
-        let exit_jump = self.emit_jump(OpCode::JumpIfFalse(0xffff));
+        let exit_jump = self.emit_jump(OpCode::JumpIfFalse(Jump::none()));
         // If we didn't jump ('while' expression was true), then pop the result of the expression before executing 'if' body
         self.emit(OpCode::Pop);
 
@@ -334,7 +334,7 @@ impl<'source> Parser<'source> {
                 self.consume(TokenType::Semicolon, "Expect ';' after loop condition.");
 
                 // Jump out of the loop if the condition is false
-                let offset = self.emit_jump(OpCode::JumpIfFalse(0xffff));
+                let offset = self.emit_jump(OpCode::JumpIfFalse(Jump::none()));
                 self.emit(OpCode::Pop); // Condition
                 Some(offset)
             } else {
@@ -345,7 +345,7 @@ impl<'source> Parser<'source> {
         // Increment clause
         if !self.advance_matching(TokenType::RightParen) {
             // Jump to body of the loop
-            let body_jump = self.emit_jump(OpCode::Jump(0xffff));
+            let body_jump = self.emit_jump(OpCode::Jump(Jump::none()));
             let increment_start = self.current_chunk().code.len();
             self.expression();
             self.emit(OpCode::Pop);
@@ -436,7 +436,7 @@ impl<'source> Parser<'source> {
 
     fn call(&mut self, _can_assign: bool) {
         let arg_count = self.argument_list();
-        self.emit(OpCode::Call(arg_count));
+        self.emit(OpCode::Call { arg_count });
     }
 
     fn dot(&mut self, can_assign: bool) {
@@ -503,7 +503,7 @@ impl<'source> Parser<'source> {
 
     fn and(&mut self, _can_assign: bool) {
         // Here, the left operand expression has already been compiled
-        let end_jump = self.emit_jump(OpCode::JumpIfFalse(0xffff));
+        let end_jump = self.emit_jump(OpCode::JumpIfFalse(Jump::none()));
 
         self.emit(OpCode::Pop);
         // Compile the right operand expression
@@ -516,8 +516,8 @@ impl<'source> Parser<'source> {
         // Here, the left operand expression has already been compiled
 
         // Simulate JumpIfTrue with two jumps #TODO would be more efficient with a dedicated opcode
-        let else_jump = self.emit_jump(OpCode::JumpIfFalse(0xffff));
-        let end_jump = self.emit_jump(OpCode::Jump(0xffff));
+        let else_jump = self.emit_jump(OpCode::JumpIfFalse(Jump::none()));
+        let end_jump = self.emit_jump(OpCode::Jump(Jump::none()));
 
         self.patch_jump(else_jump);
         self.emit(OpCode::Pop);
@@ -582,13 +582,13 @@ impl<'source> Parser<'source> {
 
     fn named_variable(&mut self, name: Token, can_assign: bool) -> Result<()> {
         let (get_opcode, set_opcode) = {
-            if let Some(arg) = self.compiler.resolve_local(name)? {
-                (OpCode::GetLocal(arg as u8), OpCode::SetLocal(arg as u8))
-            } else if let Some(arg) = self.compiler.resolve_upvalue(name)? {
-                (OpCode::GetUpvalue(arg as u8), OpCode::SetUpvalue(arg as u8))
+            if let Some(index) = self.compiler.resolve_local(name)? {
+                (OpCode::GetLocal(index), OpCode::SetLocal(index))
+            } else if let Some(index) = self.compiler.resolve_upvalue(name)? {
+                (OpCode::GetUpvalue(index), OpCode::SetUpvalue(index))
             } else {
-                let arg = self.identifier_constant(name);
-                (OpCode::GetGlobal(arg), OpCode::SetGlobal(arg))
+                let constant = self.identifier_constant(name);
+                (OpCode::GetGlobal(constant), OpCode::SetGlobal(constant))
             }
         };
 
@@ -793,10 +793,10 @@ impl<'source> Parser<'source> {
     fn patch_jump(&mut self, pos: usize) {
         let offset = self.current_chunk().code.len() - 1 - pos;
         let offset = match u16::try_from(offset) {
-            Ok(offset) => offset,
+            Ok(offset) => Jump { offset },
             Err(_) => {
                 self.error_str("Too much code to jump over.");
-                0xffff
+                Jump::none()
             }
         };
 
@@ -810,10 +810,10 @@ impl<'source> Parser<'source> {
     fn emit_loop(&mut self, start_pos: usize) {
         let offset = self.current_chunk().code.len() - start_pos;
         let offset = match u16::try_from(offset) {
-            Ok(o) => o,
+            Ok(o) => Jump { offset: o },
             Err(_) => {
                 self.error_str("Loop body too large.");
-                0xffff
+                Jump::none()
             }
         };
         self.emit(OpCode::Loop(offset));
