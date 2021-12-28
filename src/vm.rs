@@ -7,7 +7,10 @@ use std::{
 use crate::{
     error::{LoxError, Result},
     gc::{GarbageCollect, Gc, GcRef},
-    obj::{BoundMethod, Class, Closure, Instance, LoxString, NativeFn, NativeFunction, Upvalue},
+    obj::{
+        BoundMethod, Class, Closure, FunctionUpvalue, Instance, LoxString, NativeFn,
+        NativeFunction, Upvalue,
+    },
     parser,
     stack::Stack,
     table::Table,
@@ -79,8 +82,9 @@ impl Vm {
                     frame.ip,
                 );
             }
-            let instruction = self.current_frame().read_byte();
-            let instruction = unsafe { OpCode::from_unchecked(instruction) };
+            let instruction = unsafe { *self.current_frame().ip };
+            self.current_frame().ip = unsafe { self.current_frame().ip.offset(1) };
+
             match instruction {
                 OpCode::Add => {
                     let b = *self.stack.peek(0);
@@ -104,8 +108,8 @@ impl Vm {
                         }
                     }
                 }
-                OpCode::Constant => {
-                    let constant = self.current_frame().read_constant();
+                OpCode::Constant(constant) => {
+                    let constant = self.current_frame().read_constant(constant);
                     self.stack.push(constant);
                 }
                 OpCode::Divide => self.binary_op(|a, b| Value::Number(a / b))?,
@@ -148,8 +152,8 @@ impl Vm {
                 OpCode::Pop => {
                     self.stack.pop();
                 }
-                OpCode::DefineGlobal => {
-                    let value = self.current_frame().read_constant();
+                OpCode::DefineGlobal(constant) => {
+                    let value = self.current_frame().read_constant(constant);
                     match value {
                         Value::String(name) => {
                             self.globals.insert(name, *self.stack.peek(0));
@@ -159,8 +163,8 @@ impl Vm {
                         _ => unreachable!(),
                     }
                 }
-                OpCode::GetGlobal => {
-                    let value = self.current_frame().read_constant();
+                OpCode::GetGlobal(constant) => {
+                    let value = self.current_frame().read_constant(constant);
                     match value {
                         Value::String(name) => {
                             if let Some(value) = self.globals.get(name) {
@@ -176,8 +180,8 @@ impl Vm {
                         _ => unreachable!(),
                     }
                 }
-                OpCode::SetGlobal => {
-                    let value = self.current_frame().read_constant();
+                OpCode::SetGlobal(constant) => {
+                    let value = self.current_frame().read_constant(constant);
                     match value {
                         Value::String(name) => {
                             if self.globals.insert(name, *self.stack.peek(0)) {
@@ -192,49 +196,43 @@ impl Vm {
                         _ => unreachable!(),
                     }
                 }
-                OpCode::GetLocal => {
-                    let offset = self.current_frame().read_local_offset();
+                OpCode::GetLocal(offset) => {
+                    let offset = self.current_frame().read_local_offset(offset);
                     self.stack.push(*self.stack.read(offset));
                 }
-                OpCode::SetLocal => {
-                    let offset = self.current_frame().read_local_offset();
+                OpCode::SetLocal(offset) => {
+                    let offset = self.current_frame().read_local_offset(offset);
                     self.stack.write(offset, *self.stack.peek(0));
                 }
-                OpCode::JumpIfFalse => {
-                    let offset = self.current_frame().read_short();
+                OpCode::JumpIfFalse(offset) => {
                     if self.stack.peek(0).is_falsey() {
                         self.current_frame().apply_offset(offset as isize);
                     }
                 }
-                OpCode::Jump => {
+                OpCode::Jump(offset) => {
                     let frame = self.current_frame();
-                    let offset = frame.read_short();
                     frame.apply_offset(offset as isize);
                 }
-                OpCode::Loop => {
+                OpCode::Loop(offset) => {
                     let frame = self.current_frame();
-                    let offset = frame.read_short();
-                    let offset = -(offset as isize);
+                    let offset = -1 - (offset as isize);
                     frame.apply_offset(offset);
                 }
-                OpCode::Call => {
-                    let arg_count = self.current_frame().read_byte() as usize;
+                OpCode::Call(arg_count) => {
+                    let arg_count = arg_count as usize;
                     self.call_value(*self.stack.peek(arg_count), arg_count)?;
                 }
-                OpCode::Closure => {
+                OpCode::Closure(constant) => {
                     // Load the compiled function from the constant table
-                    let function = self.current_frame().read_constant();
+                    let function = self.current_frame().read_constant(constant);
                     if let Value::Function(function) = function {
                         // Wrap that function in a new closure object and push it onto the stack
-                        let closure = Closure::new(function);
-                        let mut closure = self.alloc(closure);
-                        self.stack.push(Value::Closure(closure));
+                        let mut closure = Closure::new(function);
 
                         // Iterate over each upvalue the closure expects
-                        for _ in 0..function.upvalue_count {
-                            let is_local = self.current_frame().read_byte() != 0;
-                            let index = self.current_frame().read_byte() as usize;
-                            let upvalue = if is_local {
+                        for FunctionUpvalue { is_local, index } in function.upvalues.iter() {
+                            let index = *index as usize;
+                            let upvalue = if *is_local {
                                 // If the upvalue closes over a local variable in the immediately enclosing function, we can directly capture it
                                 let location = self.current_frame().slot + index;
                                 self.capture_upvalue(location)
@@ -244,27 +242,27 @@ impl Vm {
                             };
                             closure.upvalues.push(upvalue);
                         }
+                        let closure = self.alloc(closure);
+                        self.stack.push(Value::Closure(closure));
                     } else {
                         unreachable!()
                     }
                 }
-                OpCode::GetUpvalue => {
-                    let slot = self.current_frame().read_byte() as usize;
-                    let upvalue = self.current_frame().closure.upvalues[slot];
+                OpCode::GetUpvalue(slot) => {
+                    let upvalue = self.current_frame().closure.upvalues[slot as usize];
                     let value = upvalue.read(&self.stack);
                     self.stack.push(value);
                 }
-                OpCode::SetUpvalue => {
-                    let slot = self.current_frame().read_byte() as usize;
-                    let mut upvalue = self.current_frame().closure.upvalues[slot];
+                OpCode::SetUpvalue(slot) => {
+                    let mut upvalue = self.current_frame().closure.upvalues[slot as usize];
                     upvalue.write(&mut self.stack);
                 }
                 OpCode::CloseUpvalue => {
                     self.close_upvalues(self.stack.get_offset());
                     self.stack.pop();
                 }
-                OpCode::Class => {
-                    let value = self.current_frame().read_constant();
+                OpCode::Class(constant) => {
+                    let value = self.current_frame().read_constant(constant);
                     match value {
                         Value::String(name) => {
                             let class = self.alloc(Class::new(name));
@@ -273,12 +271,12 @@ impl Vm {
                         _ => unreachable!(),
                     }
                 }
-                OpCode::GetProperty => {
+                OpCode::GetProperty(constant) => {
                     let instance = match *self.stack.peek(0) {
                         Value::Instance(instance) => instance,
                         _ => return self.runtime_error("Only instances have properties."),
                     };
-                    let name = self.read_string();
+                    let name = self.read_string(constant);
                     if let Some(value) = instance.fields.get(name) {
                         self.stack.pop(); // Instance
                         self.stack.push(value);
@@ -286,13 +284,13 @@ impl Vm {
                         self.bind_method(instance.class, name)?;
                     }
                 }
-                OpCode::SetProperty => {
+                OpCode::SetProperty(constant) => {
                     let instance = *self.stack.peek(1);
                     let mut instance = match instance {
                         Value::Instance(instance) => instance,
                         _ => return self.runtime_error("Only instances have fields."),
                     };
-                    let name = self.read_string();
+                    let name = self.read_string(constant);
                     let value = *self.stack.peek(0);
                     instance.fields.insert(name, value);
 
@@ -301,14 +299,13 @@ impl Vm {
                     self.stack.pop();
                     self.stack.push(value);
                 }
-                OpCode::Method => {
-                    let name = self.read_string();
+                OpCode::Method(constant) => {
+                    let name = self.read_string(constant);
                     self.define_method(name);
                 }
-                OpCode::Invoke => {
-                    let method = self.read_string();
-                    let arg_count = self.current_frame().read_byte() as usize;
-                    self.invoke(method, arg_count)?;
+                OpCode::Invoke((constant, arg_count)) => {
+                    let method = self.read_string(constant);
+                    self.invoke(method, arg_count as usize)?;
                 }
                 OpCode::Inherit => {
                     let superclass = match self.stack.peek(1) {
@@ -320,8 +317,8 @@ impl Vm {
                         _ => unreachable!(),
                     };
                 }
-                OpCode::GetSuper => {
-                    let name = self.read_string();
+                OpCode::GetSuper(constant) => {
+                    let name = self.read_string(constant);
                     let class = match self.stack.pop() {
                         Value::Class(class) => class,
                         _ => unreachable!(),
@@ -329,14 +326,13 @@ impl Vm {
 
                     self.bind_method(class, name)?;
                 }
-                OpCode::SuperInvoke => {
-                    let method = self.read_string();
-                    let arg_count = self.current_frame().read_byte() as usize;
+                OpCode::SuperInvoke((constant, arg_count)) => {
+                    let method = self.read_string(constant);
                     let class = match self.stack.pop() {
                         Value::Class(class) => class,
                         _ => unreachable!(),
                     };
-                    self.invoke_from_class(class, method, arg_count)?;
+                    self.invoke_from_class(class, method, arg_count as usize)?;
                 }
             }
         }
@@ -346,8 +342,8 @@ impl Vm {
         self.frames.top()
     }
 
-    fn read_string(&mut self) -> GcRef<LoxString> {
-        match self.current_frame().read_constant() {
+    fn read_string(&mut self, constant: u8) -> GcRef<LoxString> {
+        match self.current_frame().read_constant(constant) {
             Value::String(name) => name,
             _ => unreachable!(),
         }
@@ -594,7 +590,7 @@ struct CallFrame {
     closure: GcRef<Closure>,
     /// The instruction pointer of this function. Returning from this function will resume from here.
     // #TODO NonNull?
-    ip: *const u8,
+    ip: *const OpCode,
     /// The first slot in the VM's value stack that this function can use
     slot: usize,
 }
@@ -617,26 +613,13 @@ impl CallFrame {
             slot,
         }
     }
-    fn read_byte(&mut self) -> u8 {
-        let byte = unsafe { *self.ip };
-        self.ip = unsafe { self.ip.offset(1) };
-        byte
+
+    fn read_constant(&self, index: u8) -> Value {
+        self.closure.function.chunk.constants[index as usize]
     }
 
-    fn read_short(&mut self) -> u16 {
-        let byte1 = self.read_byte();
-        let byte2 = self.read_byte();
-        (byte1 as u16) << 8 | (byte2 as u16)
-    }
-
-    fn read_constant(&mut self) -> Value {
-        let index: usize = self.read_byte().try_into().unwrap();
-        self.closure.function.chunk.constants[index]
-    }
-
-    fn read_local_offset(&mut self) -> usize {
-        let offset = self.read_byte() as usize;
-        self.slot + offset
+    fn read_local_offset(&mut self, offset: u8) -> usize {
+        self.slot + (offset as usize)
     }
 
     fn apply_offset(&mut self, offset: isize) {

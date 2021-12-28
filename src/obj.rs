@@ -60,12 +60,17 @@ pub fn hash_string(string: &str) -> u32 {
     hash
 }
 
+pub struct FunctionUpvalue {
+    pub index: u8,
+    pub is_local: bool,
+}
+
 pub struct Function {
     pub header: ObjHeader,
     pub arity: usize,
     pub chunk: Chunk,
     pub name: Option<GcRef<LoxString>>,
-    pub upvalue_count: usize,
+    pub upvalues: Vec<FunctionUpvalue>,
 }
 
 impl Function {
@@ -75,7 +80,7 @@ impl Function {
             arity: 0,
             chunk: Chunk::new(),
             name,
-            upvalue_count: 0,
+            upvalues: vec![],
         }
     }
 }
@@ -123,7 +128,7 @@ pub struct Closure {
 
 impl Closure {
     pub fn new(function: GcRef<Function>) -> Self {
-        let upvalues = Vec::with_capacity(function.upvalue_count);
+        let upvalues = Vec::with_capacity(function.upvalues.len());
         Self {
             header: ObjHeader::new(ObjectType::Closure),
             upvalues,

@@ -1,7 +1,7 @@
 use crate::{
     error::{LoxError, Result},
     gc::GcRef,
-    obj::{Function, LoxString},
+    obj::{Function, FunctionUpvalue, LoxString},
     scanner::{Token, TokenType},
 };
 
@@ -24,24 +24,18 @@ pub struct Compiler<'source> {
     locals: [Local<'source>; Compiler::MAX_LOCAL_COUNT],
     /// How many locals are currently in scope
     local_count: usize,
-    pub upvalues: [Upvalue; Compiler::MAX_UPVALUE_COUNT],
     /// The number of blocks surrounding the current bit of code
     scope_depth: u32,
 }
 
 impl<'source> Compiler<'source> {
     const MAX_LOCAL_COUNT: usize = u8::MAX as usize + 1;
-    const MAX_UPVALUE_COUNT: usize = u8::MAX as usize + 1;
 
     pub fn new(function_type: FunctionType, function_name: Option<GcRef<LoxString>>) -> Self {
         const INIT_LOCAL: Local = Local {
             name: Token::none(),
             depth: None,
             is_captured: false,
-        };
-        const INIT_UPVALUE: Upvalue = Upvalue {
-            index: 255,
-            is_local: false,
         };
 
         let mut locals = [INIT_LOCAL; Compiler::MAX_LOCAL_COUNT];
@@ -57,7 +51,6 @@ impl<'source> Compiler<'source> {
         Self {
             enclosing: None,
             locals,
-            upvalues: [INIT_UPVALUE; Compiler::MAX_UPVALUE_COUNT],
             function: Function::new(function_name),
             function_type,
             local_count,
@@ -94,25 +87,23 @@ impl<'source> Compiler<'source> {
     /// Returns the upvalue index
     fn add_upvalue(&mut self, index: u8, is_local: bool) -> Result<usize> {
         // Search for the upvalue first, for cases where closure references variable in surounding function multiple times
-        for i in 0..self.function.upvalue_count {
-            let upvalue = &self.upvalues[i];
+        let count = self.function.upvalues.len();
+        for i in 0..count {
+            let upvalue = &self.function.upvalues[i];
             if upvalue.index == index && upvalue.is_local == is_local {
                 return Ok(i);
             }
         }
 
-        if self.function.upvalue_count == Self::MAX_UPVALUE_COUNT {
+        if count == Self::MAX_LOCAL_COUNT {
             return Err(LoxError::CompileError(
                 "Too many closure variables in function.",
             ));
         }
 
-        let upvalue_index = self.function.upvalue_count;
-        let upvalue = &mut self.upvalues[upvalue_index];
-        upvalue.index = index;
-        upvalue.is_local = is_local;
-        self.function.upvalue_count += 1;
-        Ok(upvalue_index)
+        let upvalue = FunctionUpvalue { index, is_local };
+        self.function.upvalues.push(upvalue);
+        Ok(count)
     }
 
     pub fn mark_var_initialized(&mut self) {

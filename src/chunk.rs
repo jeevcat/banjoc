@@ -1,7 +1,7 @@
-use crate::value::Value;
+use crate::{op_code::OpCode, value::Value};
 
 pub struct Chunk {
-    pub code: Vec<u8>,
+    pub code: Vec<OpCode>,
     pub lines: Vec<u32>,
     pub constants: Vec<Value>,
 }
@@ -15,8 +15,8 @@ impl Chunk {
         }
     }
 
-    pub fn write(&mut self, byte: u8, line: u32) {
-        self.code.push(byte);
+    pub fn write(&mut self, opcode: OpCode, line: u32) {
+        self.code.push(opcode);
         self.lines.push(line);
     }
 

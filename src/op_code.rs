@@ -1,10 +1,7 @@
-use num_enum::{IntoPrimitive, UnsafeFromPrimitive};
-
-#[derive(IntoPrimitive, UnsafeFromPrimitive)]
-#[repr(u8)]
+#[derive(Clone, Copy)]
 pub enum OpCode {
     /// Load constant for use
-    Constant,
+    Constant(u8),
 
     Not,
     Negate,
@@ -29,30 +26,30 @@ pub enum OpCode {
     Print,
     Pop,
 
-    DefineGlobal,
-    GetGlobal,
-    SetGlobal,
+    DefineGlobal(u8),
+    GetGlobal(u8),
+    SetGlobal(u8),
 
-    GetLocal,
-    SetLocal,
+    GetLocal(u8),
+    SetLocal(u8),
 
-    GetUpvalue,
-    SetUpvalue,
+    GetUpvalue(u8),
+    SetUpvalue(u8),
 
-    JumpIfFalse,
-    Jump,
-    Loop,
+    JumpIfFalse(u16),
+    Jump(u16),
+    Loop(u16),
 
-    Call,
-    Closure,
+    Call(u8),
+    Closure(u8),
     CloseUpvalue,
 
-    Class,
-    GetProperty,
-    SetProperty,
-    Method,
-    Invoke,
+    Class(u8),
+    GetProperty(u8),
+    SetProperty(u8),
+    Method(u8),
+    Invoke((u8, u8)),
     Inherit,
-    GetSuper,
-    SuperInvoke,
+    GetSuper(u8),
+    SuperInvoke((u8, u8)),
 }
