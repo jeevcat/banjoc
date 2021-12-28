@@ -589,7 +589,6 @@ impl Vm {
 struct CallFrame {
     closure: GcRef<Closure>,
     /// The instruction pointer of this function. Returning from this function will resume from here.
-    // #TODO NonNull?
     ip: *const OpCode,
     /// The first slot in the VM's value stack that this function can use
     slot: usize,

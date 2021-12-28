@@ -7,6 +7,7 @@ edition = "2021"
 debug = true
 
 [features]
+#default = ["debug_trace_execution"]
 debug_trace_execution = []
 debug_print_code = []
 debug_log_gc = []
