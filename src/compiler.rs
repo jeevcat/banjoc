@@ -3,7 +3,7 @@ use crate::{
     gc::GcRef,
     obj::{Function, FunctionUpvalue, LoxString},
     op_code::{LocalIndex, UpvalueIndex},
-    scanner::{Token, TokenType},
+    scanner::Token,
 };
 
 #[derive(Clone, Copy)]
@@ -21,10 +21,7 @@ pub struct Compiler<'source> {
     pub function: Function,
     pub function_type: FunctionType,
     /// Keeps track of which stack slots are associated with which local variables or temporaries
-    // TODO this can be a Stack
-    locals: [Local<'source>; Compiler::MAX_LOCAL_COUNT],
-    /// How many locals are currently in scope
-    local_count: usize,
+    locals: Vec<Local<'source>>,
     /// The number of blocks surrounding the current bit of code
     scope_depth: u32,
 }
@@ -33,28 +30,23 @@ impl<'source> Compiler<'source> {
     const MAX_LOCAL_COUNT: usize = u8::MAX as usize + 1;
 
     pub fn new(function_type: FunctionType, function_name: Option<GcRef<LoxString>>) -> Self {
-        const INIT_LOCAL: Local = Local {
-            name: Token::none(),
-            depth: None,
-            is_captured: false,
-        };
-
-        let mut locals = [INIT_LOCAL; Compiler::MAX_LOCAL_COUNT];
+        let mut locals = Vec::with_capacity(Self::MAX_LOCAL_COUNT);
         // Claim stack slot zero for the VM's own internal use
-        locals[0].depth = Some(0);
-        if !matches!(function_type, FunctionType::Function) {
-            locals[0].name.token_type = TokenType::This;
-            locals[0].name.lexeme = "this";
-        }
-
-        let local_count = 1;
+        let name = match function_type {
+            FunctionType::Function => Token::none(),
+            _ => Token::this(),
+        };
+        locals.push(Local {
+            name,
+            depth: Some(0),
+            is_captured: false,
+        });
 
         Self {
             enclosing: None,
             locals,
             function: Function::new(function_name),
             function_type,
-            local_count,
             scope_depth: 0,
         }
     }
@@ -68,19 +60,18 @@ impl<'source> Compiler<'source> {
     }
 
     pub fn add_local(&mut self, name: Token<'source>) -> Result<()> {
-        if self.local_count == Self::MAX_LOCAL_COUNT {
+        if self.locals.len() == Self::MAX_LOCAL_COUNT {
             return Err(LoxError::CompileError(
                 "Too many local variables in function.",
             ));
         }
 
-        let local = &mut self.locals[self.local_count];
-        local.name = name;
         // Only "declare" for now, by assigning sentinel value
-        local.depth = None;
-        local.is_captured = false;
-
-        self.local_count += 1;
+        self.locals.push(Local {
+            name,
+            depth: None,
+            is_captured: false,
+        });
 
         Ok(())
     }
@@ -113,16 +104,15 @@ impl<'source> Compiler<'source> {
         }
 
         // Now "define"
-        self.locals[self.local_count - 1].depth = Some(self.scope_depth);
+        self.locals.last_mut().unwrap().depth = Some(self.scope_depth);
     }
 
     pub fn remove_local(&mut self) {
-        self.local_count -= 1;
+        self.locals.pop();
     }
 
     pub fn resolve_local(&mut self, name: Token) -> Result<Option<LocalIndex>> {
-        for i in (0..self.local_count).rev() {
-            let local = &self.locals[i];
+        for (i, local) in self.locals.iter().enumerate().rev() {
             if name.lexeme == local.name.lexeme {
                 return if local.depth.is_none() {
                     Err(LoxError::CompileError(
@@ -151,21 +141,18 @@ impl<'source> Compiler<'source> {
         })
     }
 
-    pub fn get_local(&self) -> &Local {
-        &self.locals[self.local_count - 1]
-    }
-
     /// Is the current scope a non-global scope?
     pub fn is_local_scope(&self) -> bool {
         self.scope_depth > 0
     }
 
+    pub fn get_local(&self) -> &Local {
+        self.locals.last().unwrap()
+    }
+
     /// Are there locals stored in the current scope?
     pub fn has_local_in_scope(&self) -> bool {
-        if self.local_count == 0 {
-            return false;
-        }
-        if let Some(depth) = self.get_local().depth {
+        if let Some(depth) = self.locals.last().and_then(|x| x.depth) {
             depth >= self.scope_depth
         } else {
             false
@@ -174,8 +161,7 @@ impl<'source> Compiler<'source> {
 
     pub fn is_local_already_in_scope(&self, name: Token) -> bool {
         // Search for a variable with the same name in the current scope
-        for i in (0..self.local_count).rev() {
-            let local = &self.locals[i];
+        for local in self.locals.iter().rev() {
             if let Some(depth) = local.depth {
                 if depth < self.scope_depth {
                     break;
