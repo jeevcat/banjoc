@@ -1,8 +1,22 @@
 #[derive(Clone, Copy)]
-pub enum OpCode {
-    /// Load constant for use
-    Constant(u8),
+pub struct Constant {
+    pub slot: u8,
+}
 
+impl Constant {
+    pub fn none() -> Self {
+        Self { slot: 0 }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct Invoke {
+    pub name: Constant,
+    pub arg_count: u8,
+}
+
+#[derive(Clone, Copy)]
+pub enum OpCode {
     Not,
     Negate,
 
@@ -26,9 +40,11 @@ pub enum OpCode {
     Print,
     Pop,
 
-    DefineGlobal(u8),
-    GetGlobal(u8),
-    SetGlobal(u8),
+    /// Load constant for use to top of stack
+    Constant(Constant),
+    DefineGlobal(Constant),
+    GetGlobal(Constant),
+    SetGlobal(Constant),
 
     GetLocal(u8),
     SetLocal(u8),
@@ -41,15 +57,15 @@ pub enum OpCode {
     Loop(u16),
 
     Call(u8),
-    Closure(u8),
+    Closure(Constant),
     CloseUpvalue,
 
-    Class(u8),
-    GetProperty(u8),
-    SetProperty(u8),
-    Method(u8),
-    Invoke((u8, u8)),
+    Class(Constant),
+    GetProperty(Constant),
+    SetProperty(Constant),
+    Method(Constant),
+    Invoke(Invoke),
     Inherit,
-    GetSuper(u8),
-    SuperInvoke((u8, u8)),
+    GetSuper(Constant),
+    SuperInvoke(Invoke),
 }

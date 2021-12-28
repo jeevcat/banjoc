@@ -11,7 +11,7 @@ use crate::{
     error::{LoxError, Result},
     gc::{Gc, GcRef},
     obj::Function,
-    op_code::OpCode,
+    op_code::{Constant, Invoke, OpCode},
     scanner::{Scanner, Token, TokenType},
     value::Value,
 };
@@ -188,7 +188,7 @@ impl<'source> Parser<'source> {
                 lexeme: "super",
                 line: 0,
             });
-            self.define_variable(0);
+            self.define_variable(Constant::none());
 
             self.emit(OpCode::Inherit);
             self.class_compiler.as_mut().unwrap().has_superclass = true;
@@ -448,7 +448,7 @@ impl<'source> Parser<'source> {
             self.emit(OpCode::SetProperty(name));
         } else if self.advance_matching(TokenType::LeftParen) {
             let arg_count = self.argument_list();
-            self.emit(OpCode::Invoke((name, arg_count)));
+            self.emit(OpCode::Invoke(Invoke { name, arg_count }));
         } else {
             self.emit(OpCode::GetProperty(name));
         }
@@ -573,7 +573,7 @@ impl<'source> Parser<'source> {
         if self.advance_matching(TokenType::LeftParen) {
             let arg_count = self.argument_list();
             self.unassignable_named_variable(Token::super_());
-            self.emit(OpCode::SuperInvoke((name, arg_count)));
+            self.emit(OpCode::SuperInvoke(Invoke { name, arg_count }));
         } else {
             self.unassignable_named_variable(Token::super_());
             self.emit(OpCode::GetSuper(name));
@@ -631,18 +631,18 @@ impl<'source> Parser<'source> {
         }
     }
 
-    fn parse_variable(&mut self, error_message: &str) -> u8 {
+    fn parse_variable(&mut self, error_message: &str) -> Constant {
         self.consume(TokenType::Identifier, error_message);
 
         self.declare_variable();
         if self.compiler.is_local_scope() {
-            return 0;
+            return Constant::none();
         }
 
         self.identifier_constant(self.previous)
     }
 
-    fn define_variable(&mut self, global: u8) {
+    fn define_variable(&mut self, global: Constant) {
         if self.compiler.is_local_scope() {
             self.compiler.mark_var_initialized();
             // For local variables, we just save references to values on the stack. No need to store them somewhere else like globals do.
@@ -692,7 +692,7 @@ impl<'source> Parser<'source> {
         }
     }
 
-    fn identifier_constant(&mut self, name: Token) -> u8 {
+    fn identifier_constant(&mut self, name: Token) -> Constant {
         let value = Value::String(self.gc.intern(name.lexeme.to_string()));
         self.make_constant(value)
     }
@@ -761,8 +761,8 @@ impl<'source> Parser<'source> {
     }
 
     fn emit_constant(&mut self, value: Value) {
-        let operand = self.make_constant(value);
-        self.emit(OpCode::Constant(operand));
+        let slot = self.make_constant(value);
+        self.emit(OpCode::Constant(slot));
     }
 
     fn emit_return(&mut self) {
@@ -773,14 +773,16 @@ impl<'source> Parser<'source> {
         self.emit(OpCode::Return);
     }
 
-    fn make_constant(&mut self, value: Value) -> u8 {
+    fn make_constant(&mut self, value: Value) -> Constant {
         let constant = self.current_chunk().add_constant(value);
         if constant > u8::MAX.into() {
             // TODO we'd want to add another instruction like OpCode::Constant16 which stores the index as a two-byte operand when this limit is hit
             self.error_str("Too many constants in one chunk.");
-            return 0;
+            return Constant::none();
         }
-        constant.try_into().unwrap()
+        Constant {
+            slot: constant.try_into().unwrap(),
+        }
     }
 
     fn emit_jump(&mut self, opcode: OpCode) -> usize {

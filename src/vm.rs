@@ -11,6 +11,7 @@ use crate::{
         BoundMethod, Class, Closure, FunctionUpvalue, Instance, LoxString, NativeFn,
         NativeFunction, Upvalue,
     },
+    op_code::{Constant, Invoke},
     parser,
     stack::Stack,
     table::Table,
@@ -303,8 +304,8 @@ impl Vm {
                     let name = self.read_string(constant);
                     self.define_method(name);
                 }
-                OpCode::Invoke((constant, arg_count)) => {
-                    let method = self.read_string(constant);
+                OpCode::Invoke(Invoke { name, arg_count }) => {
+                    let method = self.read_string(name);
                     self.invoke(method, arg_count as usize)?;
                 }
                 OpCode::Inherit => {
@@ -326,8 +327,8 @@ impl Vm {
 
                     self.bind_method(class, name)?;
                 }
-                OpCode::SuperInvoke((constant, arg_count)) => {
-                    let method = self.read_string(constant);
+                OpCode::SuperInvoke(Invoke { name, arg_count }) => {
+                    let method = self.read_string(name);
                     let class = match self.stack.pop() {
                         Value::Class(class) => class,
                         _ => unreachable!(),
@@ -342,7 +343,7 @@ impl Vm {
         self.frames.top()
     }
 
-    fn read_string(&mut self, constant: u8) -> GcRef<LoxString> {
+    fn read_string(&mut self, constant: Constant) -> GcRef<LoxString> {
         match self.current_frame().read_constant(constant) {
             Value::String(name) => name,
             _ => unreachable!(),
@@ -614,8 +615,8 @@ impl CallFrame {
         }
     }
 
-    fn read_constant(&self, index: u8) -> Value {
-        self.closure.function.chunk.constants[index as usize]
+    fn read_constant(&self, constant: Constant) -> Value {
+        self.closure.function.chunk.constants[constant.slot as usize]
     }
 
     fn read_local_offset(&mut self, offset: u8) -> usize {

@@ -1,4 +1,7 @@
-use crate::{chunk::Chunk, op_code::OpCode};
+use crate::{
+    chunk::Chunk,
+    op_code::{Constant, Invoke, OpCode},
+};
 
 #[cfg(feature = "debug_print_code")]
 pub fn disassemble(chunk: &Chunk, name: &str) {
@@ -57,7 +60,7 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> usize {
         OpCode::Jump(jump) => jump_instruction("OP_JUMP", 1, offset, jump),
         OpCode::Loop(jump) => jump_instruction("OP_LOOP", -1, offset, jump),
         OpCode::Call(slot) => byte_instruction("OP_CALL", offset, slot),
-        OpCode::Closure(slot) => byte_instruction("OP_CLOSURE", offset, slot),
+        OpCode::Closure(constant) => constant_instruction("OP_CLOSURE", chunk, offset, constant),
         OpCode::GetUpvalue(slot) => byte_instruction("OP_GET_UPVALUE", offset, slot),
         OpCode::SetUpvalue(slot) => byte_instruction("OP_SET_UPVALUE", offset, slot),
         OpCode::CloseUpvalue => simple_instruction("OP_CLOSE_UPVALUE", offset),
@@ -69,14 +72,10 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> usize {
             constant_instruction("OP_SET_PROPERTY", chunk, offset, constant)
         }
         OpCode::Method(constant) => constant_instruction("OP_METHOD", chunk, offset, constant),
-        OpCode::Invoke((constant, arg_count)) => {
-            invoke_instruction("OP_INVOKE", chunk, offset, constant, arg_count)
-        }
+        OpCode::Invoke(invoke) => invoke_instruction("OP_INVOKE", chunk, offset, invoke),
         OpCode::Inherit => simple_instruction("OP_INHERIT", offset),
         OpCode::GetSuper(constant) => constant_instruction("OP_GET_SUPER", chunk, offset, constant),
-        OpCode::SuperInvoke((constant, arg_count)) => {
-            invoke_instruction("OP_SUPER_INVOKE", chunk, offset, constant, arg_count)
-        }
+        OpCode::SuperInvoke(invoke) => invoke_instruction("OP_SUPER_INVOKE", chunk, offset, invoke),
     }
 }
 
@@ -85,24 +84,18 @@ fn simple_instruction(name: &str, offset: usize) -> usize {
     offset + 1
 }
 
-fn constant_instruction(name: &str, chunk: &Chunk, offset: usize, constant: u8) -> usize {
+fn constant_instruction(name: &str, chunk: &Chunk, offset: usize, constant: Constant) -> usize {
     println!(
         "{:-16} {:4} '{}'",
-        name, constant, chunk.constants[constant as usize]
+        name, constant.slot, chunk.constants[constant.slot as usize]
     );
     offset + 1
 }
 
-fn invoke_instruction(
-    name: &str,
-    chunk: &Chunk,
-    offset: usize,
-    constant: u8,
-    arg_count: u8,
-) -> usize {
+fn invoke_instruction(name: &str, chunk: &Chunk, offset: usize, invoke: Invoke) -> usize {
     println!(
         "{:-16} {:4} '{}' ({} args)",
-        name, constant, chunk.constants[constant as usize], arg_count,
+        name, invoke.name.slot, chunk.constants[invoke.name.slot as usize], invoke.arg_count,
     );
     offset + 1
 }
