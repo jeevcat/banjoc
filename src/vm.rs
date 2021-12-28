@@ -80,266 +80,263 @@ impl Vm {
                 );
             }
             let instruction = self.current_frame().read_byte();
-            if let Ok(instruction) = instruction.try_into() {
-                match instruction {
-                    OpCode::Add => {
-                        let b = *self.stack.peek(0);
-                        let a = *self.stack.peek(1);
-                        match (a, b) {
-                            (Value::Number(a), Value::Number(b)) => {
-                                self.stack.pop();
-                                self.stack.pop();
-                                let result = Value::Number(a + b);
-                                self.stack.push(result);
-                            }
-                            (Value::String(a), Value::String(b)) => {
-                                self.stack.pop();
-                                self.stack.pop();
-                                let result = self.intern(format!("{}{}", a.as_str(), b.as_str()));
-                                self.stack.push(Value::String(result));
-                            }
-                            _ => {
-                                return self
-                                    .runtime_error("Operands must be two numbers or two strings.")
-                            }
-                        }
-                    }
-                    OpCode::Constant => {
-                        let constant = self.current_frame().read_constant();
-                        self.stack.push(constant);
-                    }
-                    OpCode::Divide => self.binary_op(|a, b| Value::Number(a / b))?,
-                    OpCode::Multiply => self.binary_op(|a, b| Value::Number(a * b))?,
-                    OpCode::Negate => {
-                        if let Value::Number(value) = *self.stack.peek(0) {
+            let instruction = unsafe { OpCode::from_unchecked(instruction) };
+            match instruction {
+                OpCode::Add => {
+                    let b = *self.stack.peek(0);
+                    let a = *self.stack.peek(1);
+                    match (a, b) {
+                        (Value::Number(a), Value::Number(b)) => {
                             self.stack.pop();
-                            self.stack.push(Value::Number(-value));
-                        } else {
-                            return self.runtime_error("Operand must be a number.");
+                            self.stack.pop();
+                            let result = Value::Number(a + b);
+                            self.stack.push(result);
+                        }
+                        (Value::String(a), Value::String(b)) => {
+                            self.stack.pop();
+                            self.stack.pop();
+                            let result = self.intern(format!("{}{}", a.as_str(), b.as_str()));
+                            self.stack.push(Value::String(result));
+                        }
+                        _ => {
+                            return self
+                                .runtime_error("Operands must be two numbers or two strings.")
                         }
                     }
-                    OpCode::Return => {
-                        let result = self.stack.pop();
-                        let fun_stack_start = self.frames.pop().slot;
-                        self.close_upvalues(fun_stack_start);
-                        if self.frames.len() == 0 {
-                            // Exit interpreter
-                            return Ok(());
-                        }
-                        self.stack.truncate(fun_stack_start);
-                        self.stack.push(result);
-                    }
-                    OpCode::Subtract => self.binary_op(|a, b| Value::Number(a - b))?,
-                    OpCode::Nil => self.stack.push(Value::Nil),
-                    OpCode::True => self.stack.push(Value::Bool(true)),
-                    OpCode::False => self.stack.push(Value::Bool(false)),
-                    OpCode::Not => {
-                        let value = self.stack.pop();
-                        self.stack.push(Value::Bool(value.is_falsey()));
-                    }
-                    OpCode::Equal => {
-                        let a = self.stack.pop();
-                        let b = self.stack.pop();
-                        self.stack.push(Value::Bool(a == b))
-                    }
-                    OpCode::Greater => self.binary_op(|a, b| Value::Bool(a > b))?,
-                    OpCode::Less => self.binary_op(|a, b| Value::Bool(a < b))?,
-                    OpCode::Print => println!("{}", self.stack.pop()),
-                    OpCode::Pop => {
+                }
+                OpCode::Constant => {
+                    let constant = self.current_frame().read_constant();
+                    self.stack.push(constant);
+                }
+                OpCode::Divide => self.binary_op(|a, b| Value::Number(a / b))?,
+                OpCode::Multiply => self.binary_op(|a, b| Value::Number(a * b))?,
+                OpCode::Negate => {
+                    if let Value::Number(value) = *self.stack.peek(0) {
                         self.stack.pop();
+                        self.stack.push(Value::Number(-value));
+                    } else {
+                        return self.runtime_error("Operand must be a number.");
                     }
-                    OpCode::DefineGlobal => {
-                        let value = self.current_frame().read_constant();
-                        match value {
-                            Value::String(name) => {
-                                self.globals.insert(name, *self.stack.peek(0));
-                                self.stack.pop();
+                }
+                OpCode::Return => {
+                    let result = self.stack.pop();
+                    let fun_stack_start = self.frames.pop().slot;
+                    self.close_upvalues(fun_stack_start);
+                    if self.frames.len() == 0 {
+                        // Exit interpreter
+                        return Ok(());
+                    }
+                    self.stack.truncate(fun_stack_start);
+                    self.stack.push(result);
+                }
+                OpCode::Subtract => self.binary_op(|a, b| Value::Number(a - b))?,
+                OpCode::Nil => self.stack.push(Value::Nil),
+                OpCode::True => self.stack.push(Value::Bool(true)),
+                OpCode::False => self.stack.push(Value::Bool(false)),
+                OpCode::Not => {
+                    let value = self.stack.pop();
+                    self.stack.push(Value::Bool(value.is_falsey()));
+                }
+                OpCode::Equal => {
+                    let a = self.stack.pop();
+                    let b = self.stack.pop();
+                    self.stack.push(Value::Bool(a == b))
+                }
+                OpCode::Greater => self.binary_op(|a, b| Value::Bool(a > b))?,
+                OpCode::Less => self.binary_op(|a, b| Value::Bool(a < b))?,
+                OpCode::Print => println!("{}", self.stack.pop()),
+                OpCode::Pop => {
+                    self.stack.pop();
+                }
+                OpCode::DefineGlobal => {
+                    let value = self.current_frame().read_constant();
+                    match value {
+                        Value::String(name) => {
+                            self.globals.insert(name, *self.stack.peek(0));
+                            self.stack.pop();
+                        }
+                        // The compiler never emits any instructions that refer to a non-string constant
+                        _ => unreachable!(),
+                    }
+                }
+                OpCode::GetGlobal => {
+                    let value = self.current_frame().read_constant();
+                    match value {
+                        Value::String(name) => {
+                            if let Some(value) = self.globals.get(name) {
+                                self.stack.push(value);
+                            } else {
+                                return self.runtime_error(&format!(
+                                    "Undefined variable '{}'.",
+                                    name.as_str()
+                                ));
                             }
-                            // The compiler never emits any instructions that refer to a non-string constant
-                            _ => unreachable!(),
                         }
+                        // The compiler never emits any instructions that refer to a non-string constant
+                        _ => unreachable!(),
                     }
-                    OpCode::GetGlobal => {
-                        let value = self.current_frame().read_constant();
-                        match value {
-                            Value::String(name) => {
-                                if let Some(value) = self.globals.get(name) {
-                                    self.stack.push(value);
-                                } else {
-                                    return self.runtime_error(&format!(
-                                        "Undefined variable '{}'.",
-                                        name.as_str()
-                                    ));
-                                }
+                }
+                OpCode::SetGlobal => {
+                    let value = self.current_frame().read_constant();
+                    match value {
+                        Value::String(name) => {
+                            if self.globals.insert(name, *self.stack.peek(0)) {
+                                self.globals.remove(name);
+                                return self.runtime_error(&format!(
+                                    "Undefined variable '{}'.",
+                                    name.as_str()
+                                ));
                             }
-                            // The compiler never emits any instructions that refer to a non-string constant
-                            _ => unreachable!(),
                         }
+                        // The compiler never emits any instructions that refer to a non-string constant
+                        _ => unreachable!(),
                     }
-                    OpCode::SetGlobal => {
-                        let value = self.current_frame().read_constant();
-                        match value {
-                            Value::String(name) => {
-                                if self.globals.insert(name, *self.stack.peek(0)) {
-                                    self.globals.remove(name);
-                                    return self.runtime_error(&format!(
-                                        "Undefined variable '{}'.",
-                                        name.as_str()
-                                    ));
-                                }
-                            }
-                            // The compiler never emits any instructions that refer to a non-string constant
-                            _ => unreachable!(),
-                        }
+                }
+                OpCode::GetLocal => {
+                    let offset = self.current_frame().read_local_offset();
+                    self.stack.push(*self.stack.read(offset));
+                }
+                OpCode::SetLocal => {
+                    let offset = self.current_frame().read_local_offset();
+                    self.stack.write(offset, *self.stack.peek(0));
+                }
+                OpCode::JumpIfFalse => {
+                    let offset = self.current_frame().read_short();
+                    if self.stack.peek(0).is_falsey() {
+                        self.current_frame().apply_offset(offset as isize);
                     }
-                    OpCode::GetLocal => {
-                        let offset = self.current_frame().read_local_offset();
-                        self.stack.push(*self.stack.read(offset));
-                    }
-                    OpCode::SetLocal => {
-                        let offset = self.current_frame().read_local_offset();
-                        self.stack.write(offset, *self.stack.peek(0));
-                    }
-                    OpCode::JumpIfFalse => {
-                        let offset = self.current_frame().read_short();
-                        if self.stack.peek(0).is_falsey() {
-                            self.current_frame().apply_offset(offset as isize);
-                        }
-                    }
-                    OpCode::Jump => {
-                        let frame = self.current_frame();
-                        let offset = frame.read_short();
-                        frame.apply_offset(offset as isize);
-                    }
-                    OpCode::Loop => {
-                        let frame = self.current_frame();
-                        let offset = frame.read_short();
-                        let offset = -(offset as isize);
-                        frame.apply_offset(offset);
-                    }
-                    OpCode::Call => {
-                        let arg_count = self.current_frame().read_byte() as usize;
-                        self.call_value(*self.stack.peek(arg_count), arg_count)?;
-                    }
-                    OpCode::Closure => {
-                        // Load the compiled function from the constant table
-                        let function = self.current_frame().read_constant();
-                        if let Value::Function(function) = function {
-                            // Wrap that function in a new closure object and push it onto the stack
-                            let closure = Closure::new(function);
-                            let mut closure = self.alloc(closure);
-                            self.stack.push(Value::Closure(closure));
+                }
+                OpCode::Jump => {
+                    let frame = self.current_frame();
+                    let offset = frame.read_short();
+                    frame.apply_offset(offset as isize);
+                }
+                OpCode::Loop => {
+                    let frame = self.current_frame();
+                    let offset = frame.read_short();
+                    let offset = -(offset as isize);
+                    frame.apply_offset(offset);
+                }
+                OpCode::Call => {
+                    let arg_count = self.current_frame().read_byte() as usize;
+                    self.call_value(*self.stack.peek(arg_count), arg_count)?;
+                }
+                OpCode::Closure => {
+                    // Load the compiled function from the constant table
+                    let function = self.current_frame().read_constant();
+                    if let Value::Function(function) = function {
+                        // Wrap that function in a new closure object and push it onto the stack
+                        let closure = Closure::new(function);
+                        let mut closure = self.alloc(closure);
+                        self.stack.push(Value::Closure(closure));
 
-                            // Iterate over each upvalue the closure expects
-                            for _ in 0..function.upvalue_count {
-                                let is_local = self.current_frame().read_byte() != 0;
-                                let index = self.current_frame().read_byte() as usize;
-                                let upvalue = if is_local {
-                                    // If the upvalue closes over a local variable in the immediately enclosing function, we can directly capture it
-                                    let location = self.current_frame().slot + index;
-                                    self.capture_upvalue(location)
-                                } else {
-                                    // Otherwise we capture the *upvalue* from the immediately enclosing function
-                                    self.current_frame().closure.upvalues[index]
-                                };
-                                closure.upvalues.push(upvalue);
-                            }
-                        } else {
-                            unreachable!()
+                        // Iterate over each upvalue the closure expects
+                        for _ in 0..function.upvalue_count {
+                            let is_local = self.current_frame().read_byte() != 0;
+                            let index = self.current_frame().read_byte() as usize;
+                            let upvalue = if is_local {
+                                // If the upvalue closes over a local variable in the immediately enclosing function, we can directly capture it
+                                let location = self.current_frame().slot + index;
+                                self.capture_upvalue(location)
+                            } else {
+                                // Otherwise we capture the *upvalue* from the immediately enclosing function
+                                self.current_frame().closure.upvalues[index]
+                            };
+                            closure.upvalues.push(upvalue);
                         }
+                    } else {
+                        unreachable!()
                     }
-                    OpCode::GetUpvalue => {
-                        let slot = self.current_frame().read_byte() as usize;
-                        let upvalue = self.current_frame().closure.upvalues[slot];
-                        let value = upvalue.read(&self.stack);
+                }
+                OpCode::GetUpvalue => {
+                    let slot = self.current_frame().read_byte() as usize;
+                    let upvalue = self.current_frame().closure.upvalues[slot];
+                    let value = upvalue.read(&self.stack);
+                    self.stack.push(value);
+                }
+                OpCode::SetUpvalue => {
+                    let slot = self.current_frame().read_byte() as usize;
+                    let mut upvalue = self.current_frame().closure.upvalues[slot];
+                    upvalue.write(&mut self.stack);
+                }
+                OpCode::CloseUpvalue => {
+                    self.close_upvalues(self.stack.get_offset());
+                    self.stack.pop();
+                }
+                OpCode::Class => {
+                    let value = self.current_frame().read_constant();
+                    match value {
+                        Value::String(name) => {
+                            let class = self.alloc(Class::new(name));
+                            self.stack.push(Value::Class(class));
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+                OpCode::GetProperty => {
+                    let instance = match *self.stack.peek(0) {
+                        Value::Instance(instance) => instance,
+                        _ => return self.runtime_error("Only instances have properties."),
+                    };
+                    let name = self.read_string();
+                    if let Some(value) = instance.fields.get(name) {
+                        self.stack.pop(); // Instance
                         self.stack.push(value);
+                    } else {
+                        self.bind_method(instance.class, name)?;
                     }
-                    OpCode::SetUpvalue => {
-                        let slot = self.current_frame().read_byte() as usize;
-                        let mut upvalue = self.current_frame().closure.upvalues[slot];
-                        upvalue.write(&mut self.stack);
-                    }
-                    OpCode::CloseUpvalue => {
-                        self.close_upvalues(self.stack.get_offset());
-                        self.stack.pop();
-                    }
-                    OpCode::Class => {
-                        let value = self.current_frame().read_constant();
-                        match value {
-                            Value::String(name) => {
-                                let class = self.alloc(Class::new(name));
-                                self.stack.push(Value::Class(class));
-                            }
-                            _ => unreachable!(),
-                        }
-                    }
-                    OpCode::GetProperty => {
-                        let instance = match *self.stack.peek(0) {
-                            Value::Instance(instance) => instance,
-                            _ => return self.runtime_error("Only instances have properties."),
-                        };
-                        let name = self.read_string();
-                        if let Some(value) = instance.fields.get(name) {
-                            self.stack.pop(); // Instance
-                            self.stack.push(value);
-                        } else {
-                            self.bind_method(instance.class, name)?;
-                        }
-                    }
-                    OpCode::SetProperty => {
-                        let instance = *self.stack.peek(1);
-                        let mut instance = match instance {
-                            Value::Instance(instance) => instance,
-                            _ => return self.runtime_error("Only instances have fields."),
-                        };
-                        let name = self.read_string();
-                        let value = *self.stack.peek(0);
-                        instance.fields.insert(name, value);
+                }
+                OpCode::SetProperty => {
+                    let instance = *self.stack.peek(1);
+                    let mut instance = match instance {
+                        Value::Instance(instance) => instance,
+                        _ => return self.runtime_error("Only instances have fields."),
+                    };
+                    let name = self.read_string();
+                    let value = *self.stack.peek(0);
+                    instance.fields.insert(name, value);
 
-                        // Remove 2nd element from the stack (the instance)
-                        let value = self.stack.pop();
-                        self.stack.pop();
-                        self.stack.push(value);
-                    }
-                    OpCode::Method => {
-                        let name = self.read_string();
-                        self.define_method(name);
-                    }
-                    OpCode::Invoke => {
-                        let method = self.read_string();
-                        let arg_count = self.current_frame().read_byte() as usize;
-                        self.invoke(method, arg_count)?;
-                    }
-                    OpCode::Inherit => {
-                        let superclass = match self.stack.peek(1) {
-                            Value::Class(class) => class,
-                            _ => return self.runtime_error("Superclass must be a class."),
-                        };
-                        match self.stack.peek(0) {
-                            Value::Class(mut subclass) => {
-                                subclass.methods.append(&superclass.methods)
-                            }
-                            _ => unreachable!(),
-                        };
-                    }
-                    OpCode::GetSuper => {
-                        let name = self.read_string();
-                        let class = match self.stack.pop() {
-                            Value::Class(class) => class,
-                            _ => unreachable!(),
-                        };
+                    // Remove 2nd element from the stack (the instance)
+                    let value = self.stack.pop();
+                    self.stack.pop();
+                    self.stack.push(value);
+                }
+                OpCode::Method => {
+                    let name = self.read_string();
+                    self.define_method(name);
+                }
+                OpCode::Invoke => {
+                    let method = self.read_string();
+                    let arg_count = self.current_frame().read_byte() as usize;
+                    self.invoke(method, arg_count)?;
+                }
+                OpCode::Inherit => {
+                    let superclass = match self.stack.peek(1) {
+                        Value::Class(class) => class,
+                        _ => return self.runtime_error("Superclass must be a class."),
+                    };
+                    match self.stack.peek(0) {
+                        Value::Class(mut subclass) => subclass.methods.append(&superclass.methods),
+                        _ => unreachable!(),
+                    };
+                }
+                OpCode::GetSuper => {
+                    let name = self.read_string();
+                    let class = match self.stack.pop() {
+                        Value::Class(class) => class,
+                        _ => unreachable!(),
+                    };
 
-                        self.bind_method(class, name)?;
-                    }
-                    OpCode::SuperInvoke => {
-                        let method = self.read_string();
-                        let arg_count = self.current_frame().read_byte() as usize;
-                        let class = match self.stack.pop() {
-                            Value::Class(class) => class,
-                            _ => unreachable!(),
-                        };
-                        self.invoke_from_class(class, method, arg_count)?;
-                    }
+                    self.bind_method(class, name)?;
+                }
+                OpCode::SuperInvoke => {
+                    let method = self.read_string();
+                    let arg_count = self.current_frame().read_byte() as usize;
+                    let class = match self.stack.pop() {
+                        Value::Class(class) => class,
+                        _ => unreachable!(),
+                    };
+                    self.invoke_from_class(class, method, arg_count)?;
                 }
             }
         }

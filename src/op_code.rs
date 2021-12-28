@@ -1,6 +1,6 @@
-use num_enum::{IntoPrimitive, TryFromPrimitive};
+use num_enum::{IntoPrimitive, UnsafeFromPrimitive};
 
-#[derive(IntoPrimitive, TryFromPrimitive)]
+#[derive(IntoPrimitive, UnsafeFromPrimitive)]
 #[repr(u8)]
 pub enum OpCode {
     /// Load constant for use
