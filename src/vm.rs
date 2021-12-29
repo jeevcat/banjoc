@@ -154,47 +154,25 @@ impl Vm {
                     self.stack.pop();
                 }
                 OpCode::DefineGlobal(constant) => {
-                    let value = self.current_frame().read_constant(constant);
-                    match value {
-                        Value::String(name) => {
-                            self.globals.insert(name, *self.stack.peek(0));
-                            self.stack.pop();
-                        }
-                        // The compiler never emits any instructions that refer to a non-string constant
-                        _ => unreachable!(),
-                    }
+                    let name = self.read_string(constant);
+                    self.globals.insert(name, *self.stack.peek(0));
+                    self.stack.pop();
                 }
                 OpCode::GetGlobal(constant) => {
-                    let value = self.current_frame().read_constant(constant);
-                    match value {
-                        Value::String(name) => {
-                            if let Some(value) = self.globals.get(name) {
-                                self.stack.push(value);
-                            } else {
-                                return self.runtime_error(&format!(
-                                    "Undefined variable '{}'.",
-                                    name.as_str()
-                                ));
-                            }
-                        }
-                        // The compiler never emits any instructions that refer to a non-string constant
-                        _ => unreachable!(),
+                    let name = self.read_string(constant);
+                    if let Some(value) = self.globals.get(name) {
+                        self.stack.push(value);
+                    } else {
+                        return self
+                            .runtime_error(&format!("Undefined variable '{}'.", name.as_str()));
                     }
                 }
                 OpCode::SetGlobal(constant) => {
-                    let value = self.current_frame().read_constant(constant);
-                    match value {
-                        Value::String(name) => {
-                            if self.globals.insert(name, *self.stack.peek(0)) {
-                                self.globals.remove(name);
-                                return self.runtime_error(&format!(
-                                    "Undefined variable '{}'.",
-                                    name.as_str()
-                                ));
-                            }
-                        }
-                        // The compiler never emits any instructions that refer to a non-string constant
-                        _ => unreachable!(),
+                    let name = self.read_string(constant);
+                    if self.globals.insert(name, *self.stack.peek(0)) {
+                        self.globals.remove(name);
+                        return self
+                            .runtime_error(&format!("Undefined variable '{}'.", name.as_str()));
                     }
                 }
                 OpCode::GetLocal(offset) => {
@@ -262,14 +240,9 @@ impl Vm {
                     self.stack.pop();
                 }
                 OpCode::Class(constant) => {
-                    let value = self.current_frame().read_constant(constant);
-                    match value {
-                        Value::String(name) => {
-                            let class = self.alloc(Class::new(name));
-                            self.stack.push(Value::Class(class));
-                        }
-                        _ => unreachable!(),
-                    }
+                    let name = self.read_string(constant);
+                    let class = self.alloc(Class::new(name));
+                    self.stack.push(Value::Class(class));
                 }
                 OpCode::GetProperty(constant) => {
                     let instance = match *self.stack.peek(0) {
