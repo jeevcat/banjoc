@@ -148,6 +148,7 @@ impl<'source> Scanner<'source> {
         match self.source.as_bytes()[self.start] {
             b'a' => self.check_keyword(1, "nd", TokenType::And),
             b'c' => self.check_keyword(1, "lass", TokenType::Class),
+            b'd' => self.check_keyword(1, "igraph", TokenType::Digraph),
             b'e' => self.check_keyword(1, "lse", TokenType::Else),
             b'i' => self.check_keyword(1, "f", TokenType::If),
             b'n' => self.check_keyword(1, "il", TokenType::Nil),
@@ -300,6 +301,8 @@ pub enum TokenType {
     True,
     Var,
     While,
+
+    Digraph,
 
     Error,
     Eof,

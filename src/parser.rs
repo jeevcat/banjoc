@@ -22,7 +22,7 @@ pub fn compile(source: &str, vm: &mut Gc) -> Result<GcRef<Function>> {
 
     parser.advance();
     while !parser.advance_matching(TokenType::Eof) {
-        parser.declaration();
+        parser.digraph();
     }
 
     let function = parser.pop_compiler().function;
@@ -100,6 +100,19 @@ impl<'source> Parser<'source> {
 
     fn current_chunk(&mut self) -> &mut Chunk {
         &mut self.compiler.function.chunk
+    }
+
+    fn digraph(&mut self) {
+        if self.advance_matching(TokenType::Digraph) {
+            // Graph names are allowed, but ignored
+            if self.check(TokenType::Identifier) {
+                self.advance();
+            }
+            self.consume(TokenType::LeftBrace, "Expect '{' before digraph body.");
+            self.block();
+        } else {
+            self.error_str("Expect 'digraph'");
+        }
     }
 
     fn expression(&mut self) {
@@ -970,6 +983,7 @@ impl<'source> ParseRuleTable<'source> {
             True =>         ParseRule::new(Some(Parser::literal),  None,                 P::None),
             Var =>          ParseRule::new(None,                   None,                 P::None),
             While =>        ParseRule::new(None,                   None,                 P::None),
+            Digraph =>      ParseRule::new(None,                   None,                 P::None),
             Error =>        ParseRule::new(None,                   None,                 P::None),
             Eof =>          ParseRule::new(None,                   None,                 P::None),
         }
