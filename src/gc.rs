@@ -210,13 +210,13 @@ impl Gc {
         }
     }
 
-    pub fn intern(&mut self, string: String) -> GcRef<LoxString> {
-        let hash = hash_string(&string);
+    pub fn intern(&mut self, string: &str) -> GcRef<LoxString> {
+        let hash = hash_string(string);
 
-        if let Some(interned) = self.strings.find_string(&string, hash) {
+        if let Some(interned) = self.strings.find_string(string, hash) {
             interned
         } else {
-            let ls = self.alloc(LoxString::new(string));
+            let ls = self.alloc(LoxString::new(string.to_string()));
             self.strings.insert(ls, Value::Nil);
             ls
         }
@@ -444,9 +444,9 @@ mod tests {
     #[test]
     fn intern_transmute() {
         let mut gc = Gc::new();
-        gc.intern("aaa".to_string());
-        gc.intern("bbb".to_string());
-        gc.intern("ccc".to_string());
+        gc.intern("aaa");
+        gc.intern("bbb");
+        gc.intern("ccc");
         let c = gc.first.unwrap().transmute::<LoxString>();
         assert_eq!(c.as_str(), "ccc");
         let b = c.header.next.unwrap().transmute::<LoxString>();

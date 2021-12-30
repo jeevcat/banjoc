@@ -12,9 +12,9 @@ use crate::{
         NativeFunction, Upvalue,
     },
     op_code::{Constant, Invoke, Jump, LocalIndex},
-    parser,
+    old_parser,
     stack::Stack,
-    table::Table,
+    table::Table, parser::Parser,
 };
 
 use crate::{op_code::OpCode, value::Value};
@@ -35,7 +35,7 @@ impl Vm {
 
     pub fn new() -> Vm {
         let mut gc = Gc::new();
-        let init_string = gc.intern("init".to_string());
+        let init_string = gc.intern("init");
 
         let mut vm = Vm {
             gc,
@@ -59,7 +59,9 @@ impl Vm {
     }
 
     pub fn interpret(&mut self, source: &str) -> Result<()> {
-        let function = parser::compile(source, &mut self.gc)?;
+        let mut parser = Parser::new(source, &mut self.gc);
+        let graph = parser.parse();
+        let function = old_parser::compile(source, &mut self.gc)?;
         // Leave the <script> function on the stack forever so it's not GC'd
         self.stack.push(Value::Function(function));
         let closure = Closure::new(function);
@@ -100,7 +102,7 @@ impl Vm {
                         (Value::String(a), Value::String(b)) => {
                             self.stack.pop();
                             self.stack.pop();
-                            let result = self.intern(format!("{}{}", a.as_str(), b.as_str()));
+                            let result = self.intern(&format!("{}{}", a.as_str(), b.as_str()));
                             self.stack.push(Value::String(result));
                         }
                         _ => {
@@ -510,7 +512,7 @@ impl Vm {
     }
 
     fn define_native(&mut self, name: &str, function: NativeFn) {
-        let ls = self.intern(name.to_string());
+        let ls = self.intern(name);
         // Pushing and popping to and from stack is only to ensure no GC occurs on call to alloc
         self.stack.push(Value::String(ls));
         let native = self.alloc(NativeFunction::new(function));
@@ -518,7 +520,7 @@ impl Vm {
         self.stack.pop();
     }
 
-    pub fn intern(&mut self, string: String) -> GcRef<LoxString> {
+    pub fn intern(&mut self, string: &str) -> GcRef<LoxString> {
         self.mark_and_collect_garbage();
         self.gc.intern(string)
     }

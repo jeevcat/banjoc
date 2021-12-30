@@ -34,6 +34,7 @@ impl<'source> Scanner<'source> {
             b';' => self.make_token(TokenType::Semicolon),
             b',' => self.make_token(TokenType::Comma),
             b'.' => self.make_token(TokenType::Dot),
+            b'-' if self.match_advance(b'>') => self.make_token(TokenType::Arrow),
             b'-' => self.make_token(TokenType::Minus),
             b'+' => self.make_token(TokenType::Plus),
             b'/' => self.make_token(TokenType::Slash),
@@ -303,6 +304,7 @@ pub enum TokenType {
     While,
 
     Digraph,
+    Arrow,
 
     Error,
     Eof,
