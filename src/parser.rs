@@ -27,11 +27,15 @@ impl<'source> Graph<'source> {
     fn ensure_node(
         &mut self,
         node_id: Token<'source>,
-        attributes: Option<Attributes>,
+        attributes: Option<Attributes<'source>>,
     ) -> &mut Node<'source> {
         // TODO why doesn't the borrow checker let me skip the extra get_mut
         if self.all_nodes.contains_key(node_id.lexeme) {
-            return self.all_nodes.get_mut(node_id.lexeme).unwrap();
+            let node = self.all_nodes.get_mut(node_id.lexeme).unwrap();
+            if let Some(attributes) = attributes {
+                node.attributes.merge(attributes);
+            }
+            return node;
         }
 
         let node_type = match node_id.token_type {
@@ -43,7 +47,11 @@ impl<'source> Graph<'source> {
             TokenType::Return => NodeType::Return { argument: "" },
             _ => NodeType::Error,
         };
-        let node = Node { node_id, node_type };
+        let node = Node {
+            node_id,
+            node_type,
+            attributes: attributes.unwrap_or_default(),
+        };
         self.all_nodes.insert(node_id.lexeme, node);
         self.all_nodes.get_mut(node_id.lexeme).unwrap()
     }
@@ -55,6 +63,7 @@ type NodeId<'source> = &'source str;
 pub struct Node<'source> {
     node_id: Token<'source>,
     node_type: NodeType<'source>,
+    attributes: Attributes<'source>,
 }
 
 #[derive(Debug)]
@@ -90,15 +99,25 @@ pub enum SymbolType<'source> {
     NativeFunction { arguments: Vec<NodeId<'source>> },
 }
 
-struct Pos {
-    x: f64,
-    y: f64,
+#[derive(Debug, Default)]
+struct Attributes<'source> {
+    comment: Option<Token<'source>>,
+    pos: Option<Token<'source>>,
+    label: Option<Token<'source>>,
 }
 
-struct Attributes<'source> {
-    comment: Option<&'source str>,
-    pos: Option<Pos>,
-    label: Option<&'source str>,
+impl<'source> Attributes<'source> {
+    fn merge(&mut self, other: Self) {
+        if other.comment.is_some() {
+            self.comment = other.comment;
+        }
+        if other.pos.is_some() {
+            self.pos = other.pos;
+        }
+        if other.label.is_some() {
+            self.label = other.label;
+        }
+    }
 }
 
 struct Tokens<'source> {
@@ -134,7 +153,7 @@ impl<'source> Tokens<'source> {
     }
 
     fn consume(&mut self, token_type: TokenType, message: &str) {
-        if self.current.token_type == token_type {
+        if self.check(token_type) {
             self.advance();
             return;
         }
@@ -257,8 +276,9 @@ impl<'source> Parser<'source> {
     }
 
     fn node_statement(&mut self) {
+        let node_id = self.tokens.previous;
         let attributes = Self::attribute_list(&mut self.tokens);
-        self.graph.ensure_node(self.tokens.previous, attributes);
+        self.graph.ensure_node(node_id, attributes);
     }
 
     fn attribute_list(tokens: &mut Tokens<'source>) -> Option<Attributes<'source>> {
@@ -269,31 +289,35 @@ impl<'source> Parser<'source> {
                 label: None,
             };
 
-            if !tokens.check(TokenType::RightBrace) {
+            if !tokens.check(TokenType::RightBracket) {
                 loop {
-                    if tokens.advance_matching(TokenType::Identifier) {
-                        let name = tokens.previous;
-                        if tokens.advance_matching(TokenType::Equal) {
-                            let value = tokens.previous;
-                            match name.lexeme {
-                                "comment" => attributes.comment = Some(value.lexeme),
-                                _ => tokens.error_str(&format!(
-                                    "Unexpected attribute name {}",
-                                    name.lexeme
-                                )),
-                            }
-                        } else {
-                            tokens.error_str("Expected '=' after attribute name.");
-                        }
-                    } else {
-                        tokens.error_str("Expected attribute name in attribute list.");
+                    tokens.consume(
+                        TokenType::Identifier,
+                        "Expected attribute name in attribute list.",
+                    );
+                    let name = tokens.previous;
+                    tokens.consume(TokenType::Equal, "Expected '=' after attribute name.");
+                    match tokens.current.token_type {
+                        TokenType::Number | TokenType::String => match name.lexeme {
+                            "comment" => attributes.comment = Some(tokens.current),
+                            "pos" => attributes.pos = Some(tokens.current),
+                            "label" => attributes.label = Some(tokens.current),
+                            _ => tokens
+                                .error_str(&format!("Unexpected attribute name {}", name.lexeme)),
+                        },
+                        _ => tokens.error_str("Expected attribute value in attribute list."),
                     }
+                    tokens.advance();
 
                     if !tokens.advance_matching(TokenType::Comma) {
                         break;
                     }
                 }
             }
+            tokens.consume(
+                TokenType::RightBracket,
+                "Expected ']' after attribute list.",
+            );
             return Some(attributes);
         }
         None
@@ -355,11 +379,25 @@ mod tests {
         let graph = parser.parse().unwrap();
         let node = graph.get_node("a").unwrap();
         assert_eq!(node.node_id.lexeme, "a");
-        match node.node_type {
-            NodeType::Symbol {
-                symbol_type: SymbolType::Variable,
-            } => {}
-            _ => panic!(),
-        }
+        assert!(matches!(node.node_type, NodeType::Symbol {symbol_type: SymbolType::Variable}));
+        assert_eq!(node.attributes.comment.unwrap().lexeme, "\"hi\"");
+    }
+
+    #[test]
+    fn node_attribs() {
+        let source = "digraph { b [pos=\"1,2\"]; a -> b; a [label=2.5] }";
+        let parser = Parser::new(source);
+        let graph = parser.parse().unwrap();
+        let a = graph.get_node("a").unwrap();
+        assert_eq!(a.node_id.lexeme, "a");
+        assert!(matches!(a.node_type, NodeType::Symbol {symbol_type: SymbolType::Variable}));
+        assert_eq!(a.attributes.label.unwrap().lexeme, "2.5");
+        let b = graph.get_node("b").unwrap();
+        assert_eq!(b.node_id.lexeme, "b");
+        match &b.node_type {
+            NodeType::Symbol {symbol_type: SymbolType::NativeFunction { arguments }} => assert_eq!(arguments[0], "a"),
+            _ => panic!()
+        };
+        assert_eq!(b.attributes.pos.unwrap().lexeme, "\"1,2\"");
     }
 }
