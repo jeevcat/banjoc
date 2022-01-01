@@ -1,3 +1,4 @@
 digraph A {
     "abc"
+    "abc" -> wow -> wow
 }

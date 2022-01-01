@@ -222,7 +222,7 @@ impl<'source> Scanner<'source> {
 }
 
 // Tokens are pretty small, so we'll pass them around by value
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Token<'source> {
     pub token_type: TokenType,
     pub lexeme: &'source str,

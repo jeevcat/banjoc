@@ -8,24 +8,71 @@ use crate::{
 };
 
 pub struct Graph<'source> {
-    roots: Vec<Node<'source>>,
+    all_nodes: HashMap<NodeId<'source>, Node<'source>>,
 }
 
+impl<'source> Graph<'source> {
+    pub fn new() -> Self {
+        Self {
+            all_nodes: HashMap::new(),
+        }
+    }
+
+    pub fn get_node(&self, node_id: NodeId) -> Option<&Node> {
+        self.all_nodes.get(node_id)
+    }
+
+    pub fn get_return_node(&self) -> &Node {
+        self.get_node("return").unwrap()
+    }
+}
+
+type NodeId<'source> = &'source str;
+
+#[derive(Debug)]
 pub struct Node<'source> {
-    id: Token<'source>,
+    node_id: Token<'source>,
     node_type: NodeType<'source>,
 }
 
+#[derive(Debug)]
 pub enum NodeType<'source> {
     Literal { value: Value },
-    NativeFunction { arguments: Vec<Node<'source>> },
+    Symbol { symbol_type: SymbolType<'source> },
+    Return { argument: NodeId<'source> },
+    Error,
+}
+
+impl<'source> NodeType<'source> {
+    fn add_input(&mut self, input: NodeId<'source>) {
+        // TODO errors
+        match self {
+            NodeType::Symbol { symbol_type } => match symbol_type {
+                SymbolType::NativeFunction { arguments } => arguments.push(input),
+                SymbolType::Variable => {
+                    // An input means we now know this symbol is callable
+                    *symbol_type = SymbolType::NativeFunction {
+                        arguments: vec![input],
+                    }
+                }
+            },
+            NodeType::Return { argument } => *argument = input,
+            _ => {}
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum SymbolType<'source> {
+    Variable,
+    NativeFunction { arguments: Vec<NodeId<'source>> },
 }
 
 pub struct Parser<'source> {
     scanner: Scanner<'source>,
     current: Token<'source>,
     previous: Token<'source>,
-    all_nodes: HashMap<&'source str, Node<'source>>,
+    graph: Graph<'source>,
     gc: &'source mut Gc,
     had_error: bool,
     panic_mode: bool,
@@ -37,20 +84,20 @@ impl<'source> Parser<'source> {
             scanner: Scanner::new(source),
             current: Token::none(),
             previous: Token::none(),
-            all_nodes: HashMap::new(),
+            graph: Graph::new(),
             gc,
             had_error: false,
             panic_mode: false,
         }
     }
 
-    pub fn parse(&mut self) -> Result<Graph> {
+    pub fn parse(mut self) -> Result<Graph<'source>> {
         self.advance();
         self.digraph();
         while !self.advance_matching(TokenType::Eof) {
             // Skip rest of file
         }
-        Ok(Graph { roots: todo!() })
+        Ok(self.graph)
     }
 
     fn advance(&mut self) {
@@ -118,77 +165,56 @@ impl<'source> Parser<'source> {
         } else {
             self.node_statement()
         }
-
-        if self.panic_mode {
-            self.synchronize();
-        }
     }
 
-    fn edge_statement(&mut self, node_id: Token) {
-        dbg!(node_id.lexeme);
+    fn edge_statement(&mut self, node_id: Token<'source>) {
+        self.ensure_node(node_id);
+        let target_token = self.current;
+        let target = self.ensure_node(target_token);
+        target.node_type.add_input(node_id.lexeme);
         self.advance();
+        if self.advance_matching(TokenType::Arrow) {
+            self.edge_statement(target_token);
+        }
     }
 
     fn node_statement(&mut self) {
-        dbg!(self.previous.lexeme);
-        if let Some(mut node) = self.all_nodes.get_mut(self.previous.lexeme) {
-        } else {
-            let node_type = match self.previous.token_type {
-                TokenType::Number => NodeType::Literal {
-                    value: self.number(),
-                },
-                TokenType::String => NodeType::Literal {
-                    value: self.string(),
-                },
-                TokenType::Identifier => NodeType::NativeFunction { arguments: vec![] },
-                _ => return self.error_at_current("Unrecognized node statement."),
-            };
-            let node = Node {
-                id: self.previous,
-                node_type,
-            };
-            self.all_nodes.insert(self.previous.lexeme, node);
-        }
+        self.ensure_node(self.previous);
         self.attribute_list();
     }
 
-    fn number(&mut self) -> Value {
-        let value: f64 = self.previous.lexeme.parse().unwrap();
-        Value::Number(value)
+    fn ensure_node(&mut self, node_id: Token<'source>) -> &mut Node<'source> {
+        // TODO why doesn't the borrow checker let me skip the extra get_mut
+        if self.graph.all_nodes.contains_key(node_id.lexeme) {
+            return self.graph.all_nodes.get_mut(node_id.lexeme).unwrap();
+        }
+        let node_type = match node_id.token_type {
+            TokenType::Number => NodeType::Literal {
+                value: number(node_id),
+            },
+            TokenType::String => NodeType::Literal {
+                value: self.string(node_id),
+            },
+            TokenType::Identifier => NodeType::Symbol {
+                symbol_type: SymbolType::Variable,
+            },
+            TokenType::Return => NodeType::Return { argument: "" },
+            _ => {
+                self.error_at(node_id, "Unrecognized node statement.");
+                NodeType::Error
+            }
+        };
+        let node = Node { node_id, node_type };
+        self.graph.all_nodes.insert(node_id.lexeme, node);
+        self.graph.all_nodes.get_mut(node_id.lexeme).unwrap()
     }
 
-    fn string(&mut self) -> Value {
-        let string = &self.previous.lexeme[1..self.previous.lexeme.len() - 1];
+    fn string(&mut self, token: Token) -> Value {
+        let string = &token.lexeme[1..token.lexeme.len() - 1];
         Value::String(self.gc.intern(string))
     }
 
     fn attribute_list(&mut self) {}
-
-    fn synchronize(&mut self) {
-        self.panic_mode = false;
-
-        // Skip all tokens intil we reach something that looks like a statement boundary
-        while !matches!(self.current.token_type, TokenType::Eof) {
-            if matches!(self.previous.token_type, TokenType::Semicolon) {
-                return;
-            }
-            match self.current.token_type {
-                TokenType::Class
-                | TokenType::Fun
-                | TokenType::Var
-                | TokenType::For
-                | TokenType::If
-                | TokenType::While
-                | TokenType::Print
-                | TokenType::Return => return,
-                _ => {
-                    // Do nothing
-                }
-            }
-
-            self.advance();
-        }
-    }
 
     fn error_at_current(&mut self, message: &str) {
         self.error_at(self.current, message)
@@ -221,5 +247,62 @@ impl<'source> Parser<'source> {
 
         eprintln!(": {}", message);
         self.had_error = true;
+    }
+}
+
+fn number(token: Token) -> Value {
+    let value: f64 = token.lexeme.parse().unwrap();
+    Value::Number(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn edges() {
+        let source = "digraph { 10 -> b -> return }";
+        let mut gc = Gc::new();
+        let parser = Parser::new(source, &mut gc);
+        let graph = parser.parse().unwrap();
+        let return_node = graph.get_return_node();
+        match return_node.node_type {
+            NodeType::Return { argument } => {
+                let b = graph.get_node(argument).unwrap();
+                match &b.node_type {
+                    NodeType::Symbol {
+                        symbol_type: SymbolType::NativeFunction { arguments },
+                    } => {
+                        let literal = graph.get_node(arguments[0]).unwrap();
+                        match literal.node_type {
+                            NodeType::Literal {
+                                value: Value::Number(number),
+                            } => assert!(f64::abs(10. - number) < 0.00001),
+                            _ => panic!(),
+                        }
+                    }
+                    _ => panic!(),
+                }
+            }
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn nodes() {
+        let source = "digraph { a b c }";
+        let mut gc = Gc::new();
+        let parser = Parser::new(source, &mut gc);
+        let graph = parser.parse().unwrap();
+        for node_id in ["a", "b", "c"] {
+            let node = graph.get_node(node_id).unwrap();
+            assert_eq!(node_id, node.node_id.lexeme);
+            match node.node_type {
+                NodeType::Symbol {
+                    symbol_type: SymbolType::Variable,
+                } => {}
+                _ => panic!(),
+            }
+        }
     }
 }
