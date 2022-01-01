@@ -959,6 +959,8 @@ impl<'source> ParseRuleTable<'source> {
             RightParen =>   ParseRule::new(None,                   None,                 P::None),
             LeftBrace =>    ParseRule::new(None,                   None,                 P::None),
             RightBrace =>   ParseRule::new(None,                   None,                 P::None),
+            LeftBracket =>  ParseRule::new(None,                   None,                 P::None),
+            RightBracket => ParseRule::new(None,                   None,                 P::None),
             Comma =>        ParseRule::new(None,                   None,                 P::None),
             Dot =>          ParseRule::new(None,                   Some(OldParser::dot),    P::Call),
             Minus =>        ParseRule::new(Some(OldParser::unary),    Some(OldParser::binary), P::Term),

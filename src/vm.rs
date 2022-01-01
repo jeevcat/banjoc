@@ -59,7 +59,7 @@ impl Vm {
     }
 
     pub fn interpret(&mut self, source: &str) -> Result<()> {
-        let parser = Parser::new(source, &mut self.gc);
+        let parser = Parser::new(source);
         let graph = parser.parse();
         let function = old_parser::compile(source, &mut self.gc)?;
         // Leave the <script> function on the stack forever so it's not GC'd
