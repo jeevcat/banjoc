@@ -38,15 +38,7 @@ impl<'source> Graph<'source> {
             return node;
         }
 
-        let node_type = match node_id.token_type {
-            TokenType::Number => NodeType::Literal,
-            TokenType::String => NodeType::Literal,
-            TokenType::Identifier => NodeType::Symbol {
-                symbol_type: SymbolType::Variable,
-            },
-            TokenType::Return => NodeType::Return { argument: "" },
-            _ => NodeType::Error,
-        };
+        let node_type = NodeType::new(node_id, attributes.as_ref());
         let node = Node {
             node_id,
             node_type,
@@ -69,34 +61,78 @@ pub struct Node<'source> {
 #[derive(Debug)]
 pub enum NodeType<'source> {
     Literal,
-    Symbol { symbol_type: SymbolType<'source> },
-    Return { argument: NodeId<'source> },
-    Error,
+    // A variable definition is a function definition with arity=0
+    Definition {
+        body: Option<NodeId<'source>>,
+        arity: u8,
+    },
+    // A reference to a function or variable
+    Reference {
+        arguments: Vec<NodeId<'source>>,
+    },
+    Return {
+        argument: Option<NodeId<'source>>,
+    },
 }
 
 impl<'source> NodeType<'source> {
+    fn new(node_id: Token<'source>, attributes: Option<&Attributes<'source>>) -> NodeType<'source> {
+        if let Some(node) = Self::from_type_attribute(attributes) {
+            return node;
+        }
+
+        if let Some(node) = Self::from_name(node_id, attributes) {
+            return node;
+        }
+        NodeType::Definition {
+            body: None,
+            arity: 0,
+        }
+    }
+
+    fn from_type_attribute<'a>(attributes: Option<&Attributes<'a>>) -> Option<NodeType<'a>> {
+        Some(match attributes?.node_type?.lexeme {
+            "def" => NodeType::Definition {
+                body: None,
+                arity: 0,
+            },
+            "ref" => NodeType::Reference { arguments: vec![] },
+            "return" => NodeType::Return { argument: None },
+            _ => return None,
+        })
+    }
+
+    /// Deduce the node type using the node_id or label
+    fn from_name<'a>(
+        token: Token<'a>,
+        attributes: Option<&Attributes<'a>>,
+    ) -> Option<NodeType<'a>> {
+        match token.token_type {
+            TokenType::Number | TokenType::String => Some(NodeType::Literal),
+            TokenType::Identifier => Self::from_name(attributes?.label?, None), // try again with label
+            TokenType::Return => Some(NodeType::Return { argument: None }),
+            _ => None,
+        }
+    }
+
     fn add_input(&mut self, input: NodeId<'source>) {
         // TODO errors
         match self {
-            NodeType::Symbol { symbol_type } => match symbol_type {
-                SymbolType::NativeFunction { arguments } => arguments.push(input),
-                SymbolType::Variable => {
-                    // An input means we now know this symbol is callable
-                    *symbol_type = SymbolType::NativeFunction {
-                        arguments: vec![input],
-                    }
-                }
-            },
-            NodeType::Return { argument } => *argument = input,
+            NodeType::Reference { arguments } => arguments.push(input),
+            NodeType::Definition { body, .. } => *body = Some(input),
+            NodeType::Return { argument } => *argument = Some(input),
             _ => {}
         }
     }
-}
 
-#[derive(Debug)]
-pub enum SymbolType<'source> {
-    Variable,
-    NativeFunction { arguments: Vec<NodeId<'source>> },
+    fn add_output(&mut self) {
+        // TODO errors
+        if let NodeType::Definition { body, .. } = self {
+            *self = NodeType::Reference {
+                arguments: body.map_or(vec![], |b| vec![b]),
+            }
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -104,6 +140,7 @@ struct Attributes<'source> {
     comment: Option<Token<'source>>,
     pos: Option<Token<'source>>,
     label: Option<Token<'source>>,
+    node_type: Option<Token<'source>>,
 }
 
 impl<'source> Attributes<'source> {
@@ -265,10 +302,13 @@ impl<'source> Parser<'source> {
     }
 
     fn edge_statement(&mut self, node_id: Token<'source>) {
-        self.graph.ensure_node(node_id, None);
+        let source = self.graph.ensure_node(node_id, None);
+        source.node_type.add_output();
+
         let target_token = self.tokens.current;
         let target = self.graph.ensure_node(target_token, None);
         target.node_type.add_input(node_id.lexeme);
+
         self.tokens.advance();
         if self.tokens.advance_matching(TokenType::Arrow) {
             self.edge_statement(target_token);
@@ -287,6 +327,7 @@ impl<'source> Parser<'source> {
                 comment: None,
                 pos: None,
                 label: None,
+                node_type: None,
             };
 
             if !tokens.check(TokenType::RightBracket) {
@@ -297,15 +338,14 @@ impl<'source> Parser<'source> {
                     );
                     let name = tokens.previous;
                     tokens.consume(TokenType::Equal, "Expected '=' after attribute name.");
-                    match tokens.current.token_type {
-                        TokenType::Number | TokenType::String => match name.lexeme {
-                            "comment" => attributes.comment = Some(tokens.current),
-                            "pos" => attributes.pos = Some(tokens.current),
-                            "label" => attributes.label = Some(tokens.current),
-                            _ => tokens
-                                .error_str(&format!("Unexpected attribute name {}", name.lexeme)),
-                        },
-                        _ => tokens.error_str("Expected attribute value in attribute list."),
+                    match name.lexeme {
+                        "comment" => attributes.comment = Some(tokens.current),
+                        "pos" => attributes.pos = Some(tokens.current),
+                        "label" => attributes.label = Some(tokens.current),
+                        "type" => attributes.node_type = Some(tokens.current),
+                        _ => {
+                            tokens.error_str(&format!("Unexpected attribute name {}", name.lexeme))
+                        }
                     }
                     tokens.advance();
 
@@ -335,12 +375,12 @@ mod tests {
         let graph = parser.parse().unwrap();
         let return_node = graph.get_return_node();
         match return_node.node_type {
-            NodeType::Return { argument } => {
+            NodeType::Return {
+                argument: Some(argument),
+            } => {
                 let b = graph.get_node(argument).unwrap();
                 match &b.node_type {
-                    NodeType::Symbol {
-                        symbol_type: SymbolType::NativeFunction { arguments },
-                    } => {
+                    NodeType::Reference { arguments } => {
                         let literal = graph.get_node(arguments[0]).unwrap();
                         assert_eq!(literal.node_id.lexeme, "10");
                         match literal.node_type {
@@ -364,9 +404,10 @@ mod tests {
             let node = graph.get_node(node_id).unwrap();
             assert_eq!(node_id, node.node_id.lexeme);
             match node.node_type {
-                NodeType::Symbol {
-                    symbol_type: SymbolType::Variable,
-                } => {}
+                NodeType::Definition { body, arity } => {
+                    assert!(body.is_none());
+                    assert_eq!(arity, 0);
+                }
                 _ => panic!(),
             }
         }
@@ -379,7 +420,7 @@ mod tests {
         let graph = parser.parse().unwrap();
         let node = graph.get_node("a").unwrap();
         assert_eq!(node.node_id.lexeme, "a");
-        assert!(matches!(node.node_type, NodeType::Symbol {symbol_type: SymbolType::Variable}));
+        assert!(matches!(node.node_type, NodeType::Definition { .. }));
         assert_eq!(node.attributes.comment.unwrap().lexeme, "\"hi\"");
     }
 
@@ -388,16 +429,101 @@ mod tests {
         let source = "digraph { b [pos=\"1,2\"]; a -> b; a [label=2.5] }";
         let parser = Parser::new(source);
         let graph = parser.parse().unwrap();
+
         let a = graph.get_node("a").unwrap();
         assert_eq!(a.node_id.lexeme, "a");
-        assert!(matches!(a.node_type, NodeType::Symbol {symbol_type: SymbolType::Variable}));
+        assert!(matches!(a.node_type, NodeType::Reference { .. }));
         assert_eq!(a.attributes.label.unwrap().lexeme, "2.5");
+
         let b = graph.get_node("b").unwrap();
         assert_eq!(b.node_id.lexeme, "b");
-        match &b.node_type {
-            NodeType::Symbol {symbol_type: SymbolType::NativeFunction { arguments }} => assert_eq!(arguments[0], "a"),
-            _ => panic!()
+        match b.node_type {
+            NodeType::Definition {
+                body: Some(body),
+                arity,
+            } => {
+                assert_eq!(body, "a");
+                assert_eq!(arity, 0);
+            }
+            _ => panic!(),
         };
         assert_eq!(b.attributes.pos.unwrap().lexeme, "\"1,2\"");
+    }
+
+    #[test]
+    fn deduce_types() {
+        let source = r#"
+            digraph {
+                1
+                "hi"
+                return
+                defn1
+                ref1
+                ret1 [label=return]
+                num1 [label=1]
+                string2 [label="stringy"]
+                1 -> defn1
+                ref1 -> ret1
+            }
+        "#;
+        let parser = Parser::new(source);
+        let graph = parser.parse().unwrap();
+        assert!(matches!(
+            graph.get_node("1").unwrap().node_type,
+            NodeType::Literal
+        ));
+        assert!(matches!(
+            graph.get_node("\"hi\"").unwrap().node_type,
+            NodeType::Literal
+        ));
+        assert!(matches!(
+            graph.get_node("return").unwrap().node_type,
+            NodeType::Return { .. }
+        ));
+        assert!(matches!(
+            graph.get_node("ret1").unwrap().node_type,
+            NodeType::Return { .. }
+        ));
+        assert!(matches!(
+            graph.get_node("num1").unwrap().node_type,
+            NodeType::Literal
+        ));
+        assert!(matches!(
+            graph.get_node("string2").unwrap().node_type,
+            NodeType::Literal
+        ));
+        assert!(matches!(
+            graph.get_node("defn1").unwrap().node_type,
+            NodeType::Definition { .. }
+        ));
+        assert!(matches!(
+            graph.get_node("ref1").unwrap().node_type,
+            NodeType::Reference { .. }
+        ));
+    }
+
+    #[test]
+    fn explicit_types() {
+        let source = r#"
+            digraph {
+                a [type=def]
+                b [type=ref]
+                c [type=return]
+            }
+        "#;
+        let parser = Parser::new(source);
+        let graph = parser.parse().unwrap();
+        assert!(matches!(
+            graph.get_node("a").unwrap().node_type,
+            NodeType::Definition { .. }
+        ));
+        assert!(matches!(
+            graph.get_node("b").unwrap().node_type,
+            NodeType::Reference { .. }
+        ));
+        assert!(matches!(
+            graph.get_node("c").unwrap().node_type,
+            NodeType::Return { .. }
+        ));
     }
 }
