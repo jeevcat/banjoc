@@ -17,15 +17,14 @@ mod disassembler;
 mod error;
 mod gc;
 mod obj;
-mod op_code;
 mod old_parser;
+mod op_code;
 mod parser;
 mod scanner;
 mod stack;
 mod table;
 mod value;
 mod vm;
-
 
 fn repl(vm: &mut Vm) {
     loop {

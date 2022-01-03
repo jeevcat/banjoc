@@ -11,10 +11,11 @@ use crate::{
         BoundMethod, Class, Closure, FunctionUpvalue, Instance, LoxString, NativeFn,
         NativeFunction, Upvalue,
     },
-    op_code::{Constant, Invoke, Jump, LocalIndex},
     old_parser,
+    op_code::{Constant, Invoke, Jump, LocalIndex},
+    parser::Parser,
     stack::Stack,
-    table::Table, parser::Parser,
+    table::Table,
 };
 
 use crate::{op_code::OpCode, value::Value};

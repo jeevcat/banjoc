@@ -66,8 +66,11 @@ pub enum NodeType<'source> {
         body: Option<NodeId<'source>>,
         arity: u8,
     },
-    // A reference to a function or variable
-    Reference {
+    Param,
+    /// A reference to a variable
+    Var,
+    /// A reference to a function
+    Fn {
         arguments: Vec<NodeId<'source>>,
     },
     Return {
@@ -96,7 +99,9 @@ impl<'source> NodeType<'source> {
                 body: None,
                 arity: 0,
             },
-            "ref" => NodeType::Reference { arguments: vec![] },
+            "fn" => NodeType::Fn { arguments: vec![] },
+            "var" => NodeType::Var,
+            "param" => NodeType::Param,
             "return" => NodeType::Return { argument: None },
             _ => return None,
         })
@@ -115,23 +120,52 @@ impl<'source> NodeType<'source> {
         }
     }
 
-    fn add_input(&mut self, input: NodeId<'source>) {
-        // TODO errors
+    fn add_input(&mut self, input: NodeId<'source>) -> Result<()> {
         match self {
-            NodeType::Reference { arguments } => arguments.push(input),
-            NodeType::Definition { body, .. } => *body = Some(input),
-            NodeType::Return { argument } => *argument = Some(input),
-            _ => {}
-        }
+            NodeType::Var => {
+                *self = NodeType::Fn {
+                    arguments: vec![input],
+                }
+            }
+            NodeType::Fn { arguments } => arguments.push(input),
+            NodeType::Definition { body, .. } => match body {
+                Some(_) => {
+                    return Err(LoxError::CompileError(
+                        "A variable or function definition can only have 1 input.",
+                    ))
+                }
+                None => *body = Some(input),
+            },
+            NodeType::Return { argument } => match argument {
+                Some(_) => return Err(LoxError::CompileError("A return can only have 1 input.")),
+                None => *argument = Some(input),
+            },
+            NodeType::Literal => {
+                return Err(LoxError::CompileError("A literal cannot have an input."))
+            }
+            NodeType::Param => {
+                return Err(LoxError::CompileError("A parameter cannot have an input."))
+            }
+        };
+        Ok(())
     }
 
-    fn add_output(&mut self) {
-        // TODO errors
-        if let NodeType::Definition { body, .. } = self {
-            *self = NodeType::Reference {
-                arguments: body.map_or(vec![], |b| vec![b]),
+    fn add_output(&mut self) -> Result<()> {
+        match self {
+            NodeType::Definition { body, .. } => {
+                *self = match body {
+                    Some(body) => NodeType::Fn {
+                        arguments: vec![body],
+                    },
+                    None => NodeType::Var,
+                }
             }
+            NodeType::Return { .. } => {
+                return Err(LoxError::CompileError("A return cannot have an output."))
+            }
+            _ => {}
         }
+        Ok(())
     }
 }
 
@@ -282,37 +316,39 @@ impl<'source> Parser<'source> {
 
     fn block(&mut self) {
         while !self.tokens.check(TokenType::RightBrace) && !self.tokens.check(TokenType::Eof) {
-            self.declaration();
+            self.declaration().unwrap_or_else(|e| self.tokens.error(e));
         }
 
         self.tokens
             .consume(TokenType::RightBrace, "Expect '}' after block.");
     }
 
-    fn declaration(&mut self) {
+    fn declaration(&mut self) -> Result<()> {
         let node_id = self.tokens.current;
         self.tokens.advance();
 
         // Only edge and node statements supported from dot spec
         if self.tokens.advance_matching(TokenType::Arrow) {
-            self.edge_statement(node_id)
+            self.edge_statement(node_id)?
         } else {
             self.node_statement()
         }
+        Ok(())
     }
 
-    fn edge_statement(&mut self, node_id: Token<'source>) {
+    fn edge_statement(&mut self, node_id: Token<'source>) -> Result<()> {
         let source = self.graph.ensure_node(node_id, None);
-        source.node_type.add_output();
+        source.node_type.add_output()?;
 
         let target_token = self.tokens.current;
         let target = self.graph.ensure_node(target_token, None);
-        target.node_type.add_input(node_id.lexeme);
+        target.node_type.add_input(node_id.lexeme)?;
 
         self.tokens.advance();
         if self.tokens.advance_matching(TokenType::Arrow) {
-            self.edge_statement(target_token);
+            self.edge_statement(target_token)?;
         }
+        Ok(())
     }
 
     fn node_statement(&mut self) {
@@ -380,7 +416,7 @@ mod tests {
             } => {
                 let b = graph.get_node(argument).unwrap();
                 match &b.node_type {
-                    NodeType::Reference { arguments } => {
+                    NodeType::Fn { arguments } => {
                         let literal = graph.get_node(arguments[0]).unwrap();
                         assert_eq!(literal.node_id.lexeme, "10");
                         match literal.node_type {
@@ -432,7 +468,7 @@ mod tests {
 
         let a = graph.get_node("a").unwrap();
         assert_eq!(a.node_id.lexeme, "a");
-        assert!(matches!(a.node_type, NodeType::Reference { .. }));
+        assert!(matches!(a.node_type, NodeType::Fn { .. }));
         assert_eq!(a.attributes.label.unwrap().lexeme, "2.5");
 
         let b = graph.get_node("b").unwrap();
@@ -458,12 +494,14 @@ mod tests {
                 "hi"
                 return
                 defn1
-                ref1
+                var1
+                fn1
                 ret1 [label=return]
                 num1 [label=1]
                 string2 [label="stringy"]
                 1 -> defn1
-                ref1 -> ret1
+                var1 -> ret1
+                fn1 -> fn1
             }
         "#;
         let parser = Parser::new(source);
@@ -497,8 +535,12 @@ mod tests {
             NodeType::Definition { .. }
         ));
         assert!(matches!(
-            graph.get_node("ref1").unwrap().node_type,
-            NodeType::Reference { .. }
+            graph.get_node("var1").unwrap().node_type,
+            NodeType::Var
+        ));
+        assert!(matches!(
+            graph.get_node("fn1").unwrap().node_type,
+            NodeType::Fn { .. }
         ));
     }
 
@@ -507,8 +549,10 @@ mod tests {
         let source = r#"
             digraph {
                 a [type=def]
-                b [type=ref]
-                c [type=return]
+                b [type=fn]
+                c [type=var]
+                d [type=return]
+                e [type=param]
             }
         "#;
         let parser = Parser::new(source);
@@ -519,11 +563,19 @@ mod tests {
         ));
         assert!(matches!(
             graph.get_node("b").unwrap().node_type,
-            NodeType::Reference { .. }
+            NodeType::Fn { .. }
         ));
         assert!(matches!(
             graph.get_node("c").unwrap().node_type,
+            NodeType::Var
+        ));
+        assert!(matches!(
+            graph.get_node("d").unwrap().node_type,
             NodeType::Return { .. }
+        ));
+        assert!(matches!(
+            graph.get_node("e").unwrap().node_type,
+            NodeType::Param
         ));
     }
 }
