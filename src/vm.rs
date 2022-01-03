@@ -5,15 +5,11 @@ use std::{
 };
 
 use crate::{
+    compiler,
     error::{LoxError, Result},
     gc::{GarbageCollect, Gc, GcRef},
-    obj::{
-        BoundMethod, Class, Closure, FunctionUpvalue, Instance, LoxString, NativeFn,
-        NativeFunction, Upvalue,
-    },
-    old_parser,
-    op_code::{Constant, Invoke, Jump, LocalIndex},
-    parser::Parser,
+    obj::{Closure, FunctionUpvalue, LoxString, NativeFn, NativeFunction, Upvalue},
+    op_code::{Constant, Jump, LocalIndex},
     stack::Stack,
     table::Table,
 };
@@ -27,7 +23,6 @@ pub struct Vm {
     frames: Stack<CallFrame, { Vm::FRAMES_MAX }>,
     globals: Table,
     open_upvalues: Option<GcRef<Upvalue>>,
-    init_string: GcRef<LoxString>,
 }
 
 impl Vm {
@@ -35,8 +30,7 @@ impl Vm {
     const STACK_MAX: usize = Self::FRAMES_MAX * (u8::MAX as usize + 1);
 
     pub fn new() -> Vm {
-        let mut gc = Gc::new();
-        let init_string = gc.intern("init");
+        let gc = Gc::new();
 
         let mut vm = Vm {
             gc,
@@ -44,7 +38,6 @@ impl Vm {
             frames: Stack::new(),
             globals: Table::new(),
             open_upvalues: None,
-            init_string,
         };
 
         vm.define_native("clock", |_| {
@@ -60,10 +53,7 @@ impl Vm {
     }
 
     pub fn interpret(&mut self, source: &str) -> Result<()> {
-        let parser = Parser::new(source);
-        let graph = parser.parse()?;
-        graph.get_return_node();
-        let function = old_parser::compile(source, &mut self.gc)?;
+        let function = compiler::compile(source, &mut self.gc)?;
         // Leave the <script> function on the stack forever so it's not GC'd
         self.stack.push(Value::Function(function));
         let closure = Closure::new(function);
@@ -129,6 +119,7 @@ impl Vm {
                 }
                 OpCode::Return => {
                     let result = self.stack.pop();
+                    println!("{}", result);
                     let fun_stack_start = self.frames.pop().slot;
                     self.close_upvalues(fun_stack_start);
                     if self.frames.len() == 0 {
@@ -243,74 +234,6 @@ impl Vm {
                     self.close_upvalues(self.stack.get_offset());
                     self.stack.pop();
                 }
-                OpCode::Class(constant) => {
-                    let name = self.read_string(constant);
-                    let class = self.alloc(Class::new(name));
-                    self.stack.push(Value::Class(class));
-                }
-                OpCode::GetProperty(constant) => {
-                    let instance = match *self.stack.peek(0) {
-                        Value::Instance(instance) => instance,
-                        _ => return self.runtime_error("Only instances have properties."),
-                    };
-                    let name = self.read_string(constant);
-                    if let Some(value) = instance.fields.get(name) {
-                        self.stack.pop(); // Instance
-                        self.stack.push(value);
-                    } else {
-                        self.bind_method(instance.class, name)?;
-                    }
-                }
-                OpCode::SetProperty(constant) => {
-                    let instance = *self.stack.peek(1);
-                    let mut instance = match instance {
-                        Value::Instance(instance) => instance,
-                        _ => return self.runtime_error("Only instances have fields."),
-                    };
-                    let name = self.read_string(constant);
-                    let value = *self.stack.peek(0);
-                    instance.fields.insert(name, value);
-
-                    // Remove 2nd element from the stack (the instance)
-                    let value = self.stack.pop();
-                    self.stack.pop();
-                    self.stack.push(value);
-                }
-                OpCode::Method(constant) => {
-                    let name = self.read_string(constant);
-                    self.define_method(name);
-                }
-                OpCode::Invoke(Invoke { name, arg_count }) => {
-                    let method = self.read_string(name);
-                    self.invoke(method, arg_count as usize)?;
-                }
-                OpCode::Inherit => {
-                    let superclass = match self.stack.peek(1) {
-                        Value::Class(class) => class,
-                        _ => return self.runtime_error("Superclass must be a class."),
-                    };
-                    match self.stack.peek(0) {
-                        Value::Class(mut subclass) => subclass.methods.append(&superclass.methods),
-                        _ => unreachable!(),
-                    };
-                }
-                OpCode::GetSuper(constant) => {
-                    let name = self.read_string(constant);
-                    let class = match self.stack.pop() {
-                        Value::Class(class) => class,
-                        _ => unreachable!(),
-                    };
-
-                    self.bind_method(class, name)?;
-                }
-                OpCode::SuperInvoke(Invoke { name, arg_count }) => {
-                    let method = self.read_string(name);
-                    let class = match self.stack.pop() {
-                        Value::Class(class) => class,
-                        _ => unreachable!(),
-                    };
-                    self.invoke_from_class(class, method, arg_count as usize)?;
-                }
             }
         }
     }
@@ -351,82 +274,9 @@ impl Vm {
                 Ok(())
             }
             Value::Closure(callee) => self.call(callee, arg_count),
-            Value::Class(class) => {
-                let instance = self.alloc(Instance::new(class));
-                self.stack.write(
-                    self.stack.get_offset() - arg_count,
-                    Value::Instance(instance),
-                );
-                if let Some(initializer) = class.methods.get(self.init_string) {
-                    match initializer {
-                        Value::Closure(initializer) => return self.call(initializer, arg_count),
-                        _ => unreachable!(),
-                    }
-                } else if arg_count != 0 {
-                    return self
-                        .runtime_error(&format!("Expected 0 arguments but got {}.", arg_count));
-                }
-                Ok(())
-            }
-            Value::BoundMethod(bound) => {
-                self.stack
-                    .write(self.stack.get_offset() - arg_count, bound.receiver);
-                self.call(bound.method, arg_count)
-            }
 
             _ => self.runtime_error("Can only call functions and classes."),
         }
-    }
-
-    fn invoke_from_class(
-        &mut self,
-        class: GcRef<Class>,
-        name: GcRef<LoxString>,
-        arg_count: usize,
-    ) -> Result<()> {
-        if let Some(method) = class.methods.get(name) {
-            match method {
-                Value::Closure(closure) => self.call(closure, arg_count),
-                _ => unreachable!(),
-            }
-        } else {
-            self.runtime_error(&format!("Undefined property '{}'.", name.as_str()))
-        }
-    }
-
-    fn invoke(&mut self, name: GcRef<LoxString>, arg_count: usize) -> Result<()> {
-        let receiver = *self.stack.peek(arg_count);
-        let receiver = match receiver {
-            Value::Instance(instance) => instance,
-            _ => return self.runtime_error("Only instances have methods."),
-        };
-
-        if let Some(value) = receiver.fields.get(name) {
-            self.stack.write(self.stack.get_offset() - arg_count, value);
-            return self.call_value(value, arg_count);
-        }
-
-        self.invoke_from_class(receiver.class, name, arg_count)
-    }
-
-    fn bind_method(&mut self, class: GcRef<Class>, name: GcRef<LoxString>) -> Result<()> {
-        let method = match class.methods.get(name) {
-            Some(value) => value,
-            None => return self.runtime_error(&format!("Undefined property '{}'.", name.as_str())),
-        };
-
-        let closure = match method {
-            Value::Closure(closure) => closure,
-            _ => unreachable!(),
-        };
-
-        let bound = self.alloc(BoundMethod::new(*self.stack.peek(0), closure));
-        let bound = Value::BoundMethod(bound);
-
-        self.stack.pop();
-        self.stack.push(bound);
-
-        Ok(())
     }
 
     fn call(&mut self, callee: GcRef<Closure>, arg_count: usize) -> Result<()> {
@@ -487,16 +337,6 @@ impl Vm {
         }
     }
 
-    fn define_method(&mut self, name: GcRef<LoxString>) {
-        let method = *self.stack.peek(0);
-        let mut class = match self.stack.peek(1) {
-            Value::Class(class) => *class,
-            _ => unreachable!(),
-        };
-        class.methods.insert(name, method);
-        self.stack.pop();
-    }
-
     fn runtime_error(&self, message: &str) -> Result<()> {
         eprintln!("{}", message);
 
@@ -504,10 +344,7 @@ impl Vm {
         for i in (0..self.frames.len()).rev() {
             let frame = self.frames.read(i);
             let closure = frame.closure;
-            let instruction =
-                unsafe { frame.ip.offset_from(closure.function.chunk.code.as_ptr()) - 1 } as usize;
-            let line = closure.function.chunk.lines[instruction];
-            eprintln!("[line {}] in {}", line, *closure);
+            eprintln!("in {}", *closure);
         }
 
         Err(LoxError::RuntimeError)

@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     gc::{GarbageCollect, Gc, GcRef},
-    obj::{BoundMethod, Class, Closure, Function, Instance, LoxString, NativeFunction},
+    obj::{Closure, Graph, LoxString, NativeFunction},
 };
 
 #[derive(Clone, Copy)]
@@ -16,12 +16,9 @@ pub enum Value {
     Number(f64),
     // Following are pointers to garbage collected objects. Value is NOT deep copied.
     String(GcRef<LoxString>),
-    Function(GcRef<Function>),
+    Function(GcRef<Graph>),
     NativeFunction(GcRef<NativeFunction>),
     Closure(GcRef<Closure>),
-    Class(GcRef<Class>),
-    Instance(GcRef<Instance>),
-    BoundMethod(GcRef<BoundMethod>),
 }
 
 impl Value {
@@ -44,9 +41,6 @@ impl PartialEq for Value {
             (Value::Function(a), Value::Function(b)) => a == b,
             (Value::NativeFunction(a), Value::NativeFunction(b)) => a == b,
             (Value::Closure(a), Value::Closure(b)) => a == b,
-            (Value::Class(a), Value::Class(b)) => a == b,
-            (Value::Instance(a), Value::Instance(b)) => a == b,
-            (Value::BoundMethod(a), Value::BoundMethod(b)) => a == b,
             _ => false,
         }
     }
@@ -62,9 +56,6 @@ impl Display for Value {
             Value::Function(x) => Display::fmt(x.deref(), f),
             Value::NativeFunction(x) => Display::fmt(x.deref(), f),
             Value::Closure(x) => Display::fmt(x.deref(), f),
-            Value::Class(x) => Display::fmt(x.deref(), f),
-            Value::Instance(x) => Display::fmt(x.deref(), f),
-            Value::BoundMethod(x) => Display::fmt(x.deref(), f),
         }
     }
 }

@@ -6,10 +6,7 @@ use std::{
 };
 
 use crate::{
-    obj::{
-        hash_string, BoundMethod, Class, Closure, Function, Instance, LoxString, NativeFunction,
-        ObjectType, Upvalue,
-    },
+    obj::{hash_string, Closure, Graph, LoxString, NativeFunction, ObjectType, Upvalue},
     table::Table,
     value::Value,
 };
@@ -19,13 +16,10 @@ impl HeaderPtr {
     fn size_of_val(&self) -> usize {
         match self.obj_type {
             ObjectType::String => mem::size_of::<LoxString>(),
-            ObjectType::Function => mem::size_of::<Function>(),
+            ObjectType::Graph => mem::size_of::<Graph>(),
             ObjectType::NativeFunction => mem::size_of::<NativeFunction>(),
             ObjectType::Closure => mem::size_of::<Closure>(),
             ObjectType::Upvalue => mem::size_of::<Upvalue>(),
-            ObjectType::Class => mem::size_of::<Class>(),
-            ObjectType::Instance => mem::size_of::<Instance>(),
-            ObjectType::BoundMethod => mem::size_of::<BoundMethod>(),
         }
     }
 
@@ -37,13 +31,10 @@ impl HeaderPtr {
         // Must transmute to drop the full object, not just the header
         match self.obj_type {
             ObjectType::String => self.transmute::<LoxString>().drop_ptr(),
-            ObjectType::Function => self.transmute::<Function>().drop_ptr(),
+            ObjectType::Graph => self.transmute::<Graph>().drop_ptr(),
             ObjectType::NativeFunction => self.transmute::<NativeFunction>().drop_ptr(),
             ObjectType::Closure => self.transmute::<Closure>().drop_ptr(),
             ObjectType::Upvalue => self.transmute::<Upvalue>().drop_ptr(),
-            ObjectType::Class => self.transmute::<Class>().drop_ptr(),
-            ObjectType::Instance => self.transmute::<Instance>().drop_ptr(),
-            ObjectType::BoundMethod => self.transmute::<BoundMethod>().drop_ptr(),
         }
     }
 }
@@ -74,13 +65,10 @@ impl Display for HeaderPtr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.obj_type {
             ObjectType::String => self.transmute::<LoxString>().fmt(f),
-            ObjectType::Function => self.transmute::<Function>().fmt(f),
+            ObjectType::Graph => self.transmute::<Graph>().fmt(f),
             ObjectType::NativeFunction => self.transmute::<NativeFunction>().fmt(f),
             ObjectType::Closure => self.transmute::<Closure>().fmt(f),
             ObjectType::Upvalue => self.transmute::<Upvalue>().fmt(f),
-            ObjectType::Class => self.transmute::<Class>().fmt(f),
-            ObjectType::Instance => self.transmute::<Instance>().fmt(f),
-            ObjectType::BoundMethod => self.transmute::<BoundMethod>().fmt(f),
         }
     }
 }
@@ -314,8 +302,8 @@ impl Gc {
                     closed.mark_gray(self);
                 }
             }
-            ObjectType::Function => {
-                let mut function = obj.transmute::<Function>();
+            ObjectType::Graph => {
+                let mut function = obj.transmute::<Graph>();
                 if let Some(mut name) = function.name {
                     name.mark_gray(self);
                 }
@@ -329,21 +317,6 @@ impl Gc {
                 for i in 0..closure.upvalues.len() {
                     closure.upvalues[i].mark_gray(self);
                 }
-            }
-            ObjectType::Class => {
-                let mut class = obj.transmute::<Class>();
-                class.name.mark_gray(self);
-                class.methods.mark_gray(self);
-            }
-            ObjectType::Instance => {
-                let mut instance = obj.transmute::<Instance>();
-                instance.class.mark_gray(self);
-                instance.fields.mark_gray(self);
-            }
-            ObjectType::BoundMethod => {
-                let mut bound = obj.transmute::<BoundMethod>();
-                bound.receiver.mark_gray(self);
-                bound.method.mark_gray(self);
             }
         }
     }
@@ -419,8 +392,8 @@ mod tests {
         let mut ls = LoxString::new("func".to_string());
         let pointer = unsafe { NonNull::new_unchecked(&mut ls) };
         let gcref = GcRef { pointer };
-        let ls = Function::new(Some(gcref));
-        assert!(matches!(ls.header.obj_type, ObjectType::Function));
+        let ls = Graph::new(Some(gcref));
+        assert!(matches!(ls.header.obj_type, ObjectType::Graph));
     }
 
     #[test]

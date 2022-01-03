@@ -1,6 +1,3 @@
-#![allow(dead_code)]
-// TODO Remove dead code
-
 use std::{
     env, fs,
     io::{self, Write},
@@ -16,8 +13,8 @@ mod compiler;
 mod disassembler;
 mod error;
 mod gc;
+mod graph_compiler;
 mod obj;
-mod old_parser;
 mod op_code;
 mod parser;
 mod scanner;

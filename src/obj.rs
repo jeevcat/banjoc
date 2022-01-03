@@ -14,13 +14,10 @@ use crate::{
 #[derive(Clone, Copy)]
 pub enum ObjectType {
     String,
-    Function,
+    Graph,
     NativeFunction,
     Closure,
     Upvalue,
-    Class,
-    Instance,
-    BoundMethod,
 }
 
 pub struct LoxString {
@@ -65,7 +62,7 @@ pub struct FunctionUpvalue {
     pub is_local: bool,
 }
 
-pub struct Function {
+pub struct Graph {
     pub header: ObjHeader,
     pub arity: usize,
     pub chunk: Chunk,
@@ -73,10 +70,10 @@ pub struct Function {
     pub upvalues: Vec<FunctionUpvalue>,
 }
 
-impl Function {
+impl Graph {
     pub fn new(name: Option<GcRef<LoxString>>) -> Self {
         Self {
-            header: ObjHeader::new(ObjectType::Function),
+            header: ObjHeader::new(ObjectType::Graph),
             arity: 0,
             chunk: Chunk::new(),
             name,
@@ -85,7 +82,7 @@ impl Function {
     }
 }
 
-impl Display for Function {
+impl Display for Graph {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         if let Some(name) = self.name {
             f.write_str("<fn ")?;
@@ -122,12 +119,12 @@ impl Display for NativeFunction {
 
 pub struct Closure {
     pub header: ObjHeader,
-    pub function: GcRef<Function>,
+    pub function: GcRef<Graph>,
     pub upvalues: Vec<GcRef<Upvalue>>,
 }
 
 impl Closure {
-    pub fn new(function: GcRef<Function>) -> Self {
+    pub fn new(function: GcRef<Graph>) -> Self {
         let upvalues = Vec::with_capacity(function.upvalues.len());
         Self {
             header: ObjHeader::new(ObjectType::Closure),
@@ -182,71 +179,5 @@ impl Upvalue {
 impl Display for Upvalue {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.write_str("upvalue")
-    }
-}
-
-pub struct Class {
-    pub header: ObjHeader,
-    pub name: GcRef<LoxString>,
-    pub methods: Table,
-}
-
-impl Display for Class {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.write_str(self.name.as_str())
-    }
-}
-
-impl Class {
-    pub fn new(name: GcRef<LoxString>) -> Self {
-        Self {
-            header: ObjHeader::new(ObjectType::Class),
-            name,
-            methods: Table::new(),
-        }
-    }
-}
-
-pub struct Instance {
-    pub header: ObjHeader,
-    pub class: GcRef<Class>,
-    pub fields: Table,
-}
-
-impl Display for Instance {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.write_str(&format!("{} instance", self.class.name.as_str()))
-    }
-}
-
-impl Instance {
-    pub fn new(class: GcRef<Class>) -> Self {
-        Self {
-            header: ObjHeader::new(ObjectType::Instance),
-            class,
-            fields: Table::new(),
-        }
-    }
-}
-
-pub struct BoundMethod {
-    pub header: ObjHeader,
-    pub receiver: Value,
-    pub method: GcRef<Closure>,
-}
-
-impl BoundMethod {
-    pub fn new(receiver: Value, method: GcRef<Closure>) -> Self {
-        Self {
-            header: ObjHeader::new(ObjectType::BoundMethod),
-            receiver,
-            method,
-        }
-    }
-}
-
-impl Display for BoundMethod {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        self.method.function.fmt(f)
     }
 }

@@ -1,205 +1,258 @@
+use std::mem::{self};
+
 use crate::{
+    chunk::Chunk,
     error::{LoxError, Result},
-    gc::GcRef,
-    obj::{Function, FunctionUpvalue, LoxString},
-    op_code::{LocalIndex, UpvalueIndex},
-    scanner::Token,
+    gc::{Gc, GcRef},
+    graph_compiler::GraphCompiler,
+    obj::Graph,
+    op_code::{Constant, Jump, OpCode},
+    parser::{Ast, Node, NodeType, Parser},
+    scanner::{Token, TokenType},
+    value::Value,
 };
 
-#[derive(Clone, Copy)]
-pub enum FunctionType {
-    Script,
-    Function,
-    Method,
-    Initializer,
+pub fn compile(source: &str, vm: &mut Gc) -> Result<GcRef<Graph>> {
+    let parser = Parser::new(source);
+    let ast = parser.parse()?;
+    let mut compiler = Compiler::new(vm);
+
+    compiler.compile(&ast);
+
+    let graph = compiler.pop_graph_compiler().graph;
+
+    if compiler.had_error {
+        Err(LoxError::CompileError("Parser error."))
+    } else {
+        Ok(vm.alloc(graph))
+    }
 }
 
-/// A compiler for a function, including the implicit top-level function, <script>
-pub struct Compiler<'source> {
-    // TODO can this be improved without using the heap?
-    pub enclosing: Option<Box<Compiler<'source>>>,
-    pub function: Function,
-    pub function_type: FunctionType,
-    /// Keeps track of which stack slots are associated with which local variables or temporaries
-    locals: Vec<Local<'source>>,
-    /// The number of blocks surrounding the current bit of code
-    scope_depth: u32,
+struct Compiler<'source> {
+    // TODO: this should be an option
+    compiler: Box<GraphCompiler<'source>>,
+    gc: &'source mut Gc,
+    had_error: bool,
+    panic_mode: bool,
 }
 
 impl<'source> Compiler<'source> {
-    const MAX_LOCAL_COUNT: usize = u8::MAX as usize + 1;
-
-    pub fn new(function_type: FunctionType, function_name: Option<GcRef<LoxString>>) -> Self {
-        let mut locals = Vec::with_capacity(Self::MAX_LOCAL_COUNT);
-        // Claim stack slot zero for the VM's own internal use
-        let name = match function_type {
-            FunctionType::Function => Token::none(),
-            _ => Token::this(),
-        };
-        locals.push(Local {
-            name,
-            depth: Some(0),
-            is_captured: false,
-        });
-
+    fn new(gc: &'source mut Gc) -> Compiler<'source> {
         Self {
-            enclosing: None,
-            locals,
-            function: Function::new(function_name),
-            function_type,
-            scope_depth: 0,
+            compiler: Box::new(GraphCompiler::new(None)),
+            gc,
+            had_error: false,
+            panic_mode: false,
         }
     }
 
-    pub fn begin_scope(&mut self) {
-        self.scope_depth += 1;
+    fn compile(&mut self, ast: &Ast<'source>) {
+        let return_node = ast.get_return_node();
+        self.node(ast, return_node);
     }
 
-    pub fn end_scope(&mut self) {
-        self.scope_depth -= 1;
-    }
-
-    pub fn add_local(&mut self, name: Token<'source>) -> Result<()> {
-        if self.locals.len() == Self::MAX_LOCAL_COUNT {
-            return Err(LoxError::CompileError(
-                "Too many local variables in function.",
-            ));
-        }
-
-        // Only "declare" for now, by assigning sentinel value
-        self.locals.push(Local {
-            name,
-            depth: None,
-            is_captured: false,
-        });
-
-        Ok(())
-    }
-
-    /// Returns the upvalue index
-    fn add_upvalue(&mut self, index: u8, is_local: bool) -> Result<UpvalueIndex> {
-        // Search for the upvalue first, for cases where closure references variable in surounding function multiple times
-        let count = self.function.upvalues.len();
-        for i in 0..count {
-            let upvalue = &self.function.upvalues[i];
-            if upvalue.index == index && upvalue.is_local == is_local {
-                return Ok(i as UpvalueIndex);
+    fn node(&mut self, ast: &Ast, node: &Node) {
+        match &node.node_type {
+            NodeType::Literal => self.literal(node.node_id),
+            NodeType::Definition { body, arity } => todo!(),
+            NodeType::Param => todo!(),
+            NodeType::Var => todo!(),
+            NodeType::Fn { arguments } => todo!(),
+            NodeType::Return { argument } => {
+                let node = ast.get_node(argument.unwrap()).unwrap();
+                self.node(ast, node);
+                self.emit_return();
             }
         }
-
-        if count == Self::MAX_LOCAL_COUNT {
-            return Err(LoxError::CompileError(
-                "Too many closure variables in function.",
-            ));
-        }
-
-        let upvalue = FunctionUpvalue { index, is_local };
-        self.function.upvalues.push(upvalue);
-        Ok(count as UpvalueIndex)
     }
 
-    pub fn mark_var_initialized(&mut self) {
-        if !self.is_local_scope() {
+    fn literal(&mut self, token: Token) {
+        match token.token_type {
+            TokenType::False => self.emit(OpCode::False),
+            TokenType::Nil => self.emit(OpCode::Nil),
+            TokenType::True => self.emit(OpCode::True),
+            TokenType::Number => self.number(token),
+            TokenType::String => self.string(token),
+            _ => unreachable!(),
+        }
+    }
+
+    fn number(&mut self, token: Token) {
+        let value: f64 = token.lexeme.parse().unwrap();
+        self.emit_constant(Value::Number(value))
+    }
+
+    fn string(&mut self, token: Token) {
+        let string = &token.lexeme[1..token.lexeme.len() - 1];
+        let value = Value::String(self.gc.intern(string));
+        self.emit_constant(value);
+    }
+
+    fn current_chunk(&mut self) -> &mut Chunk {
+        &mut self.compiler.graph.chunk
+    }
+
+    fn define_variable(&mut self, global: Constant) {
+        if self.compiler.is_local_scope() {
+            self.compiler.mark_var_initialized();
+            // For local variables, we just save references to values on the stack. No need to store them somewhere else like globals do.
             return;
         }
 
-        // Now "define"
-        self.locals.last_mut().unwrap().depth = Some(self.scope_depth);
+        self.emit(OpCode::DefineGlobal(global))
     }
 
-    pub fn remove_local(&mut self) {
-        self.locals.pop();
+    fn declare_variable(&mut self, name: Token<'source>) {
+        if !self.compiler.is_local_scope() {
+            return;
+        }
+
+        if self.compiler.is_local_already_in_scope(name) {
+            self.error_str("Already a variable with this name in this scope.");
+        }
+
+        self.add_local(name);
     }
 
-    pub fn resolve_local(&mut self, name: Token) -> Result<Option<LocalIndex>> {
-        for (i, local) in self.locals.iter().enumerate().rev() {
-            if name.lexeme == local.name.lexeme {
-                return if local.depth.is_none() {
-                    Err(LoxError::CompileError(
-                        "Can't read local variable in its own initializer.",
-                    ))
-                } else {
-                    Ok(Some(i as u8))
-                };
+    fn add_local(&mut self, name: Token<'source>) {
+        if let Err(err) = self.compiler.add_local(name) {
+            self.error(err)
+        }
+    }
+
+    fn identifier_constant(&mut self, name: Token) -> Constant {
+        let value = Value::String(self.gc.intern(name.lexeme));
+        self.make_constant(value)
+    }
+
+    fn push_graph_compiler(&mut self, graph_name: &str) {
+        let graph_name = self.gc.intern(graph_name);
+        let new_compiler = Box::new(GraphCompiler::new(Some(graph_name)));
+        let old_compiler = mem::replace(&mut self.compiler, new_compiler);
+        self.compiler.enclosing = Some(old_compiler);
+    }
+
+    fn pop_graph_compiler(&mut self) -> GraphCompiler {
+        #[cfg(feature = "debug_print_code")]
+        {
+            if !self.had_error {
+                let name = self
+                    .compiler
+                    .graph
+                    .name
+                    .map(|ls| ls.as_str().to_string())
+                    .unwrap_or_else(|| "<script>".to_string());
+
+                crate::disassembler::disassemble(&self.compiler.graph.chunk, &name);
             }
         }
-        Ok(None)
+
+        if let Some(enclosing) = self.compiler.enclosing.take() {
+            let compiler = mem::replace(&mut self.compiler, enclosing);
+            *compiler
+        } else {
+            // TODO no need to put a random object into self.compiler
+            let compiler = mem::replace(&mut self.compiler, Box::new(GraphCompiler::new(None)));
+            *compiler
+        }
     }
 
-    pub fn resolve_upvalue(&mut self, name: Token) -> Result<Option<UpvalueIndex>> {
-        Ok(if let Some(enclosing) = self.enclosing.as_mut() {
-            if let Some(index) = enclosing.resolve_local(name)? {
-                enclosing.locals[index as usize].is_captured = true;
-                Some(self.add_upvalue(index, true)?)
-            } else if let Some(upvalue) = enclosing.resolve_upvalue(name)? {
-                Some(self.add_upvalue(upvalue as u8, false)?)
+    fn begin_scope(&mut self) {
+        self.compiler.begin_scope();
+    }
+
+    fn end_scope(&mut self) {
+        // Discard locally declared variables
+        while self.compiler.has_local_in_scope() {
+            if self.compiler.get_local().is_captured {
+                self.emit(OpCode::CloseUpvalue);
             } else {
-                None
+                self.emit(OpCode::Pop);
             }
-        } else {
-            None
-        })
+            self.compiler.remove_local();
+        }
+        self.compiler.end_scope();
     }
 
-    /// Is the current scope a non-global scope?
-    pub fn is_local_scope(&self) -> bool {
-        self.scope_depth > 0
+    fn emit(&mut self, opcode: OpCode) {
+        self.current_chunk().write(opcode)
     }
 
-    pub fn get_local(&self) -> &Local {
-        self.locals.last().unwrap()
+    fn emit_constant(&mut self, value: Value) {
+        let slot = self.make_constant(value);
+        self.emit(OpCode::Constant(slot));
     }
 
-    /// Are there locals stored in the current scope?
-    pub fn has_local_in_scope(&self) -> bool {
-        if let Some(depth) = self.locals.last().and_then(|x| x.depth) {
-            depth >= self.scope_depth
-        } else {
-            false
+    fn emit_return(&mut self) {
+        self.emit(OpCode::Return);
+    }
+
+    fn make_constant(&mut self, value: Value) -> Constant {
+        let constant = self.current_chunk().add_constant(value);
+        if constant > u8::MAX.into() {
+            // TODO we'd want to add another instruction like OpCode::Constant16 which stores the index as a two-byte operand when this limit is hit
+            self.error_str("Too many constants in one chunk.");
+            return Constant::none();
+        }
+        Constant {
+            slot: constant.try_into().unwrap(),
         }
     }
 
-    pub fn is_local_already_in_scope(&self, name: Token) -> bool {
-        // Search for a variable with the same name in the current scope
-        for local in self.locals.iter().rev() {
-            if let Some(depth) = local.depth {
-                if depth < self.scope_depth {
-                    break;
-                }
-            }
-
-            if name.lexeme == local.name.lexeme {
-                return true;
-            }
-        }
-        false
+    fn emit_jump(&mut self, opcode: OpCode) -> usize {
+        self.emit(opcode);
+        self.current_chunk().code.len() - 1
     }
-}
 
-pub struct ClassCompiler {
-    pub enclosing: Option<Box<ClassCompiler>>,
-    pub has_superclass: bool,
-}
+    fn patch_jump(&mut self, pos: usize) {
+        let offset = self.current_chunk().code.len() - 1 - pos;
+        let offset = match u16::try_from(offset) {
+            Ok(offset) => Jump { offset },
+            Err(_) => {
+                self.error_str("Too much code to jump over.");
+                Jump::none()
+            }
+        };
 
-impl ClassCompiler {
-    pub fn new(enclosing: Option<Box<ClassCompiler>>) -> Self {
-        Self {
-            enclosing,
-            has_superclass: false,
+        match self.current_chunk().code[pos] {
+            OpCode::JumpIfFalse(ref mut o) => *o = offset,
+            OpCode::Jump(ref mut o) => *o = offset,
+            _ => unreachable!(),
         }
     }
-}
 
-pub struct Local<'source> {
-    name: Token<'source>,
-    /// The scope depth of the block where the local variable was declared
-    /// None means declared but not defined
-    depth: Option<u32>,
-    pub is_captured: bool,
-}
+    fn emit_loop(&mut self, start_pos: usize) {
+        let offset = self.current_chunk().code.len() - start_pos;
+        let offset = match u16::try_from(offset) {
+            Ok(o) => Jump { offset: o },
+            Err(_) => {
+                self.error_str("Loop body too large.");
+                Jump::none()
+            }
+        };
+        self.emit(OpCode::Loop(offset));
+    }
 
-#[derive(Debug)]
-pub struct Upvalue {
-    pub index: u8,
-    pub is_local: bool,
+    fn error_at_current(&mut self, message: &str) {
+        self.error_at(message)
+    }
+
+    fn error_str(&mut self, message: &str) {
+        self.error_at(message);
+    }
+
+    fn error(&mut self, error: LoxError) {
+        if let LoxError::CompileError(message) = error {
+            self.error_at(message)
+        }
+    }
+
+    fn error_at(&mut self, message: &str) {
+        if self.panic_mode {
+            return;
+        }
+        self.panic_mode = true;
+        eprint!("Error: {}", message);
+        self.had_error = true;
+    }
 }

@@ -10,12 +10,6 @@ impl Constant {
 }
 
 #[derive(Clone, Copy)]
-pub struct Invoke {
-    pub name: Constant,
-    pub arg_count: u8,
-}
-
-#[derive(Clone, Copy)]
 pub struct Jump {
     pub offset: u16,
 }
@@ -75,13 +69,4 @@ pub enum OpCode {
     },
     Closure(Constant),
     CloseUpvalue,
-
-    Class(Constant),
-    GetProperty(Constant),
-    SetProperty(Constant),
-    Method(Constant),
-    Invoke(Invoke),
-    Inherit,
-    GetSuper(Constant),
-    SuperInvoke(Invoke),
 }

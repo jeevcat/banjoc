@@ -150,26 +150,17 @@ impl<'source> Scanner<'source> {
     fn identifier_type(&self) -> TokenType {
         match self.source.as_bytes()[self.start] {
             b'a' => self.check_keyword(1, "nd", TokenType::And),
-            b'c' => self.check_keyword(1, "lass", TokenType::Class),
             b'd' => self.check_keyword(1, "igraph", TokenType::Digraph),
             b'e' => self.check_keyword(1, "lse", TokenType::Else),
             b'i' => self.check_keyword(1, "f", TokenType::If),
             b'n' => self.check_keyword(1, "il", TokenType::Nil),
             b'o' => self.check_keyword(1, "r", TokenType::Or),
-            b'p' => self.check_keyword(1, "rint", TokenType::Print),
             b'r' => self.check_keyword(1, "eturn", TokenType::Return),
-            b's' => self.check_keyword(1, "uper", TokenType::Super),
+            b't' => self.check_keyword(1, "rue", TokenType::True),
             b'v' => self.check_keyword(1, "ar", TokenType::Var),
-            b'w' => self.check_keyword(1, "hile", TokenType::While),
             b'f' if self.current - self.start > 1 => match self.source.as_bytes()[self.start + 1] {
                 b'a' => self.check_keyword(2, "lse", TokenType::False),
-                b'o' => self.check_keyword(2, "r", TokenType::For),
-                b'u' => self.check_keyword(2, "n", TokenType::Fun),
-                _ => TokenType::Identifier,
-            },
-            b't' if self.current - self.start > 1 => match self.source.as_bytes()[self.start + 1] {
-                b'h' => self.check_keyword(2, "is", TokenType::This),
-                b'r' => self.check_keyword(2, "ue", TokenType::True),
+                b'n' => self.check_keyword(2, "n", TokenType::Fn),
                 _ => TokenType::Identifier,
             },
             _ => TokenType::Identifier,
@@ -239,22 +230,6 @@ impl<'source> Token<'source> {
             line: 0,
         }
     }
-
-    pub const fn this() -> Token<'source> {
-        Token {
-            token_type: TokenType::This,
-            lexeme: "this",
-            line: 0,
-        }
-    }
-
-    pub const fn super_() -> Token<'source> {
-        Token {
-            token_type: TokenType::Super,
-            lexeme: "super",
-            line: 0,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, IntoPrimitive, EnumIter, EnumCount)]
@@ -290,23 +265,19 @@ pub enum TokenType {
     Number,
 
     // Keywords.
-    And,
-    Class,
-    Else,
-    False,
-    For,
-    Fun,
     If,
-    Nil,
+    Else,
+    And,
     Or,
-    Print,
-    Return,
-    Super,
-    This,
+    False,
     True,
-    Var,
-    While,
+    Nil,
 
+    Def,
+    Var,
+    Fn,
+    Param,
+    Return,
     Digraph,
     Arrow,
 

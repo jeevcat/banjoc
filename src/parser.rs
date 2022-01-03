@@ -5,11 +5,11 @@ use crate::{
     scanner::{Scanner, Token, TokenType},
 };
 
-pub struct Graph<'source> {
-    all_nodes: HashMap<NodeId<'source>, Node<'source>>,
+pub struct Ast<'source> {
+    pub all_nodes: HashMap<NodeId<'source>, Node<'source>>,
 }
 
-impl<'source> Graph<'source> {
+impl<'source> Ast<'source> {
     pub fn new() -> Self {
         Self {
             all_nodes: HashMap::new(),
@@ -49,12 +49,12 @@ impl<'source> Graph<'source> {
     }
 }
 
-type NodeId<'source> = &'source str;
+pub type NodeId<'source> = &'source str;
 
 #[derive(Debug)]
 pub struct Node<'source> {
-    node_id: Token<'source>,
-    node_type: NodeType<'source>,
+    pub node_id: Token<'source>,
+    pub node_type: NodeType<'source>,
     attributes: Attributes<'source>,
 }
 
@@ -113,7 +113,11 @@ impl<'source> NodeType<'source> {
         attributes: Option<&Attributes<'a>>,
     ) -> Option<NodeType<'a>> {
         match token.token_type {
-            TokenType::Number | TokenType::String => Some(NodeType::Literal),
+            TokenType::Number
+            | TokenType::String
+            | TokenType::Nil
+            | TokenType::True
+            | TokenType::False => Some(NodeType::Literal),
             TokenType::Identifier => Self::from_name(attributes?.label?, None), // try again with label
             TokenType::Return => Some(NodeType::Return { argument: None }),
             _ => None,
@@ -280,18 +284,18 @@ impl<'source> Tokens<'source> {
 
 pub struct Parser<'source> {
     tokens: Tokens<'source>,
-    graph: Graph<'source>,
+    graph: Ast<'source>,
 }
 
 impl<'source> Parser<'source> {
     pub fn new(source: &'source str) -> Self {
         Self {
             tokens: Tokens::new(source),
-            graph: Graph::new(),
+            graph: Ast::new(),
         }
     }
 
-    pub fn parse(mut self) -> Result<Graph<'source>> {
+    pub fn parse(mut self) -> Result<Ast<'source>> {
         self.tokens.advance();
         self.digraph();
         while !self.tokens.advance_matching(TokenType::Eof) {
