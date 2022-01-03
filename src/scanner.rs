@@ -150,14 +150,19 @@ impl<'source> Scanner<'source> {
     fn identifier_type(&self) -> TokenType {
         match self.source.as_bytes()[self.start] {
             b'a' => self.check_keyword(1, "nd", TokenType::And),
-            b'd' => self.check_keyword(1, "igraph", TokenType::Digraph),
             b'e' => self.check_keyword(1, "lse", TokenType::Else),
             b'i' => self.check_keyword(1, "f", TokenType::If),
             b'n' => self.check_keyword(1, "il", TokenType::Nil),
             b'o' => self.check_keyword(1, "r", TokenType::Or),
             b'r' => self.check_keyword(1, "eturn", TokenType::Return),
+            b'p' => self.check_keyword(1, "aram", TokenType::Param),
             b't' => self.check_keyword(1, "rue", TokenType::True),
             b'v' => self.check_keyword(1, "ar", TokenType::Var),
+            b'd' if self.current - self.start > 1 => match self.source.as_bytes()[self.start + 1] {
+                b'e' => self.check_keyword(2, "f", TokenType::Def),
+                b'i' => self.check_keyword(2, "graph", TokenType::Digraph),
+                _ => TokenType::Identifier,
+            },
             b'f' if self.current - self.start > 1 => match self.source.as_bytes()[self.start + 1] {
                 b'a' => self.check_keyword(2, "lse", TokenType::False),
                 b'n' => self.check_keyword(2, "n", TokenType::Fn),

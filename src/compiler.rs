@@ -46,17 +46,31 @@ impl<'source> Compiler<'source> {
         }
     }
 
-    fn compile(&mut self, ast: &Ast<'source>) {
+    fn compile(&mut self, ast: &'source Ast<'source>) {
+        self.begin_scope();
+        for node in ast.get_definitions() {
+            dbg!(node);
+            self.node(ast, node);
+        }
+
         let return_node = ast.get_return_node();
         self.node(ast, return_node);
+        self.end_scope();
     }
 
-    fn node(&mut self, ast: &Ast, node: &Node) {
+    fn node(&mut self, ast: &'source Ast<'source>, node: &'source Node<'source>) {
         match &node.node_type {
-            NodeType::Literal => self.literal(node.node_id),
-            NodeType::Definition { body, arity } => todo!(),
+            NodeType::Literal => self.literal(node.get_name()),
+            NodeType::Definition { body, arity } => {
+                let body_node = ast.get_node(body.unwrap()).unwrap();
+                if *arity > 0 {
+                    todo!();
+                } else {
+                    self.var_declaration(ast, body_node, node.get_name());
+                }
+            }
             NodeType::Param => todo!(),
-            NodeType::Var => todo!(),
+            NodeType::Var => self.variable(node.get_name()),
             NodeType::Fn { arguments } => todo!(),
             NodeType::Return { argument } => {
                 let node = ast.get_node(argument.unwrap()).unwrap();
@@ -91,27 +105,71 @@ impl<'source> Compiler<'source> {
     fn current_chunk(&mut self) -> &mut Chunk {
         &mut self.compiler.graph.chunk
     }
-
-    fn define_variable(&mut self, global: Constant) {
-        if self.compiler.is_local_scope() {
-            self.compiler.mark_var_initialized();
-            // For local variables, we just save references to values on the stack. No need to store them somewhere else like globals do.
-            return;
+    
+    fn variable(&mut self, name: Token) {
+        if let Err(err) = self.named_variable(name) {
+            self.error(err)
         }
+    }
+    
+    fn named_variable(&mut self, name: Token) -> Result<()> {
+        let get_opcode  = {
+            if let Some(index) = self.compiler.resolve_local(name)? {
+                OpCode::GetLocal(index)
+            } else if let Some(index) = self.compiler.resolve_upvalue(name)? {
+                OpCode::GetUpvalue(index)
+            } else {
+                let constant = self.identifier_constant(name);
+                OpCode::GetGlobal(constant)
+            }
+        };
 
-        self.emit(OpCode::DefineGlobal(global))
+        self.emit(get_opcode);
+        Ok(())
     }
 
-    fn declare_variable(&mut self, name: Token<'source>) {
-        if !self.compiler.is_local_scope() {
-            return;
+    fn var_declaration(
+        &mut self,
+        ast: &'source Ast<'source>,
+        body_node: &'source Node<'source>,
+        name: Token<'source>,
+    ) {
+        let global = self.parse_variable(name);
+
+        self.node(ast, body_node);
+
+        self.define_variable(global);
+    }
+
+    fn parse_variable(&mut self, name: Token<'source>) -> Option<Constant> {
+        // At runtime, locals aren’t looked up by name.
+        // There’s no need to stuff the variable’s name into the constant table, so if the declaration is inside a local scope, we return None instead.
+        if self.compiler.is_local_scope() {
+            self.declare_local_variable(name);
+            None
+        } else {
+            Some(self.identifier_constant(name))
         }
+    }
+
+    fn declare_local_variable(&mut self, name: Token<'source>) {
+        debug_assert!(self.compiler.is_local_scope());
 
         if self.compiler.is_local_already_in_scope(name) {
             self.error_str("Already a variable with this name in this scope.");
         }
 
         self.add_local(name);
+    }
+
+    fn define_variable(&mut self, global: Option<Constant>) {
+        if let Some(global) = global {
+            self.emit(OpCode::DefineGlobal(global))
+        } else {
+            // For local variables, we just save references to values on the stack. No need to store them somewhere else like globals do.
+            debug_assert!(self.compiler.is_local_scope());
+            self.compiler.mark_var_initialized();
+        }
     }
 
     fn add_local(&mut self, name: Token<'source>) {

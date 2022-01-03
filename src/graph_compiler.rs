@@ -86,12 +86,13 @@ impl<'source> GraphCompiler<'source> {
     }
 
     pub fn mark_var_initialized(&mut self) {
-        if !self.is_local_scope() {
-            return;
-        }
+        debug_assert!(self.is_local_scope());
 
         // Now "define"
-        self.locals.last_mut().unwrap().depth = Some(self.scope_depth);
+        self.locals
+            .last_mut()
+            .unwrap()
+            .mark_initialized(self.scope_depth);
     }
 
     pub fn remove_local(&mut self) {
@@ -101,12 +102,12 @@ impl<'source> GraphCompiler<'source> {
     pub fn resolve_local(&mut self, name: Token) -> Result<Option<LocalIndex>> {
         for (i, local) in self.locals.iter().enumerate().rev() {
             if name.lexeme == local.name.lexeme {
-                return if local.depth.is_none() {
+                return if local.is_initialized() {
+                    Ok(Some(i as u8))
+                } else {
                     Err(LoxError::CompileError(
                         "Can't read local variable in its own initializer.",
                     ))
-                } else {
-                    Ok(Some(i as u8))
                 };
             }
         }
@@ -169,6 +170,16 @@ pub struct Local<'source> {
     /// None means declared but not defined
     depth: Option<u32>,
     pub is_captured: bool,
+}
+
+impl<'source> Local<'source> {
+    fn is_initialized(&self) -> bool {
+        self.depth.is_some()
+    }
+
+    fn mark_initialized(&mut self, depth: u32) {
+        self.depth = Some(depth)
+    }
 }
 
 #[derive(Debug)]

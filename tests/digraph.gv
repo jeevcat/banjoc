@@ -1,4 +1,6 @@
 digraph A {
-    "abc"
-    "abc" -> wow -> wow
+    def_a [type=def, label=a]
+    ref_a [label=a]
+    "hello!" -> def_a
+    ref_a -> return
 }

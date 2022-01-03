@@ -53,10 +53,10 @@ impl Vm {
     }
 
     pub fn interpret(&mut self, source: &str) -> Result<()> {
-        let function = compiler::compile(source, &mut self.gc)?;
+        let graph = compiler::compile(source, &mut self.gc)?;
         // Leave the <script> function on the stack forever so it's not GC'd
-        self.stack.push(Value::Function(function));
-        let closure = Closure::new(function);
+        self.stack.push(Value::Graph(graph));
+        let closure = Closure::new(graph);
         let closure = self.alloc(closure);
 
         self.call(closure, 0)?;
@@ -198,7 +198,7 @@ impl Vm {
                 OpCode::Closure(constant) => {
                     // Load the compiled function from the constant table
                     let function = self.current_frame().read_constant(constant);
-                    if let Value::Function(function) = function {
+                    if let Value::Graph(function) = function {
                         // Wrap that function in a new closure object and push it onto the stack
                         let mut closure = Closure::new(function);
 

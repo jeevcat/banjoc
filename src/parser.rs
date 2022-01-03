@@ -7,12 +7,14 @@ use crate::{
 
 pub struct Ast<'source> {
     pub all_nodes: HashMap<NodeId<'source>, Node<'source>>,
+    pub return_node: Option<NodeId<'source>>,
 }
 
 impl<'source> Ast<'source> {
     pub fn new() -> Self {
         Self {
             all_nodes: HashMap::new(),
+            return_node: None,
         }
     }
 
@@ -21,7 +23,15 @@ impl<'source> Ast<'source> {
     }
 
     pub fn get_return_node(&self) -> &Node {
-        self.get_node("return").unwrap()
+        self.get_node(self.return_node.unwrap()).unwrap()
+    }
+
+    pub fn get_definitions(&self) -> impl Iterator<Item = &Node> {
+        // TODO perf
+        self.all_nodes
+            .iter()
+            .map(|(_, node)| node)
+            .filter(|node| matches!(node.node_type, NodeType::Definition { .. }))
     }
 
     fn ensure_node(
@@ -39,6 +49,9 @@ impl<'source> Ast<'source> {
         }
 
         let node_type = NodeType::new(node_id, attributes.as_ref());
+        if let NodeType::Return { .. } = node_type {
+            self.return_node = Some(node_id.lexeme)
+        }
         let node = Node {
             node_id,
             node_type,
@@ -56,6 +69,13 @@ pub struct Node<'source> {
     pub node_id: Token<'source>,
     pub node_type: NodeType<'source>,
     attributes: Attributes<'source>,
+}
+
+impl<'source> Node<'source> {
+    /// The label if available, otherwise the node_id
+    pub fn get_name(&self) -> Token {
+        self.attributes.label.unwrap_or(self.node_id)
+    }
 }
 
 #[derive(Debug)]
@@ -94,15 +114,15 @@ impl<'source> NodeType<'source> {
     }
 
     fn from_type_attribute<'a>(attributes: Option<&Attributes<'a>>) -> Option<NodeType<'a>> {
-        Some(match attributes?.node_type?.lexeme {
-            "def" => NodeType::Definition {
+        Some(match attributes?.node_type?.token_type {
+            TokenType::Def => NodeType::Definition {
                 body: None,
                 arity: 0,
             },
-            "fn" => NodeType::Fn { arguments: vec![] },
-            "var" => NodeType::Var,
-            "param" => NodeType::Param,
-            "return" => NodeType::Return { argument: None },
+            TokenType::Fn => NodeType::Fn { arguments: vec![] },
+            TokenType::Var => NodeType::Var,
+            TokenType::Param => NodeType::Param,
+            TokenType::Return => NodeType::Return { argument: None },
             _ => return None,
         })
     }
@@ -383,9 +403,8 @@ impl<'source> Parser<'source> {
                         "pos" => attributes.pos = Some(tokens.current),
                         "label" => attributes.label = Some(tokens.current),
                         "type" => attributes.node_type = Some(tokens.current),
-                        _ => {
-                            tokens.error_str(&format!("Unexpected attribute name {}", name.lexeme))
-                        }
+                        _ => tokens
+                            .error_str(&format!("Unexpected attribute name '{}'", name.lexeme)),
                     }
                     tokens.advance();
 
