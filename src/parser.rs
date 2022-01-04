@@ -99,6 +99,31 @@ pub enum NodeType<'source> {
     Return {
         argument: Option<NodeId<'source>>,
     },
+    Unary {
+        argument: Option<NodeId<'source>>,
+    },
+    Binary {
+        term_a: Option<NodeId<'source>>,
+        term_b: Option<NodeId<'source>>,
+    },
+    Variadic {
+        terms: Vec<NodeId<'source>>,
+    },
+}
+
+impl<'source> NodeType<'source> {
+    fn unary() -> Self {
+        NodeType::Unary { argument: None }
+    }
+    fn binary() -> Self {
+        NodeType::Binary {
+            term_a: None,
+            term_b: None,
+        }
+    }
+    fn variadic() -> Self {
+        NodeType::Variadic { terms: vec![] }
+    }
 }
 
 impl<'source> NodeType<'source> {
@@ -115,6 +140,17 @@ impl<'source> NodeType<'source> {
 
     fn from_type_attribute<'a>(attributes: Option<&Attributes<'a>>) -> Option<NodeType<'a>> {
         Some(match attributes?.node_type?.token_type {
+            TokenType::Not => NodeType::unary(),
+            TokenType::Negate => NodeType::unary(),
+            TokenType::Sum => NodeType::variadic(),
+            TokenType::Subtract => NodeType::binary(),
+            TokenType::Product => NodeType::variadic(),
+            TokenType::Divide => NodeType::binary(),
+            TokenType::Equals => NodeType::binary(),
+            TokenType::Greater => NodeType::binary(),
+            TokenType::GreaterEqual => NodeType::binary(),
+            TokenType::Less => NodeType::binary(),
+            TokenType::LessEqual => NodeType::binary(),
             TokenType::Fn => NodeType::FunctionDefinition {
                 body: None,
                 arity: 0,
@@ -134,6 +170,17 @@ impl<'source> NodeType<'source> {
         attributes: Option<&Attributes<'a>>,
     ) -> Option<NodeType<'a>> {
         match token.token_type {
+            TokenType::Not => Some(NodeType::unary()),
+            TokenType::Negate => Some(NodeType::unary()),
+            TokenType::Sum => Some(NodeType::variadic()),
+            TokenType::Subtract => Some(NodeType::binary()),
+            TokenType::Product => Some(NodeType::variadic()),
+            TokenType::Divide => Some(NodeType::binary()),
+            TokenType::Equals => Some(NodeType::binary()),
+            TokenType::Greater => Some(NodeType::binary()),
+            TokenType::GreaterEqual => Some(NodeType::binary()),
+            TokenType::Less => Some(NodeType::binary()),
+            TokenType::LessEqual => Some(NodeType::binary()),
             TokenType::Number
             | TokenType::String
             | TokenType::Nil
@@ -145,6 +192,14 @@ impl<'source> NodeType<'source> {
         }
     }
 
+    fn set_argument(argument: &mut Option<NodeId<'source>>, input: NodeId<'source>) -> Result<()> {
+        match argument {
+            Some(_) => return Err(LoxError::CompileError("Node can only have 1 input.")),
+            None => *argument = Some(input),
+        }
+        Ok(())
+    }
+
     fn add_input(&mut self, input: NodeId<'source>) -> Result<()> {
         match self {
             NodeType::VariableReference => {
@@ -152,33 +207,25 @@ impl<'source> NodeType<'source> {
                     arguments: vec![input],
                 }
             }
-            NodeType::VariableDefinition { body, .. } => match body {
-                Some(_) => {
-                    return Err(LoxError::CompileError(
-                        "A variable definition can only have 1 input.",
-                    ))
-                }
-                None => *body = Some(input),
-            },
+            NodeType::VariableDefinition { body, .. } => Self::set_argument(body, input)?,
             NodeType::FunctionCall { arguments } => arguments.push(input),
-            NodeType::FunctionDefinition { body, .. } => match body {
-                Some(_) => {
-                    return Err(LoxError::CompileError(
-                        "A function definition can only have 1 input.",
-                    ))
-                }
-                None => *body = Some(input),
-            },
-            NodeType::Return { argument } => match argument {
-                Some(_) => return Err(LoxError::CompileError("A return can only have 1 input.")),
-                None => *argument = Some(input),
-            },
+            NodeType::FunctionDefinition { body, .. } => Self::set_argument(body, input)?,
+            NodeType::Return { argument } => Self::set_argument(argument, input)?,
             NodeType::Literal => {
                 return Err(LoxError::CompileError("A literal cannot have an input."))
             }
             NodeType::Param => {
                 return Err(LoxError::CompileError("A parameter cannot have an input."))
             }
+            NodeType::Unary { argument } => Self::set_argument(argument, input)?,
+            NodeType::Binary { term_a, term_b } => match term_a {
+                Some(_) => match term_b {
+                    Some(_) => return Err(LoxError::CompileError("Node can only have 2 inputs.")),
+                    None => *term_b = Some(input),
+                },
+                None => *term_a = Some(input),
+            },
+            NodeType::Variadic { terms } => terms.push(input),
         };
         Ok(())
     }
@@ -594,6 +641,13 @@ mod tests {
                 d [type=ref]
                 e [type=return]
                 f [type=param]
+                g [type=not]
+                h [type=subtract]
+                i [type=sum]
+                j [type=gt]
+                k [type=gte]
+                l [type=lt]
+                m [type=lte]
             }
         "#;
         let parser = Parser::new(source);
@@ -621,6 +675,34 @@ mod tests {
         assert!(matches!(
             graph.get_node("f").unwrap().node_type,
             NodeType::Param
+        ));
+        assert!(matches!(
+            graph.get_node("g").unwrap().node_type,
+            NodeType::Unary { .. }
+        ));
+        assert!(matches!(
+            graph.get_node("h").unwrap().node_type,
+            NodeType::Binary { .. }
+        ));
+        assert!(matches!(
+            graph.get_node("i").unwrap().node_type,
+            NodeType::Variadic { .. }
+        ));
+        assert!(matches!(
+            graph.get_node("j").unwrap().node_type,
+            NodeType::Binary { .. }
+        ));
+        assert!(matches!(
+            graph.get_node("k").unwrap().node_type,
+            NodeType::Binary { .. }
+        ));
+        assert!(matches!(
+            graph.get_node("l").unwrap().node_type,
+            NodeType::Binary { .. }
+        ));
+        assert!(matches!(
+            graph.get_node("m").unwrap().node_type,
+            NodeType::Binary { .. }
         ));
     }
 }

@@ -1,6 +1,3 @@
-use num_enum::IntoPrimitive;
-use strum::{EnumCount, EnumIter};
-
 pub struct Scanner<'source> {
     source: &'source str,
     start: usize,
@@ -26,29 +23,15 @@ impl<'source> Scanner<'source> {
             return self.make_token(TokenType::Eof);
         }
 
-        match self.advance() {
-            b'(' => self.make_token(TokenType::LeftParen),
-            b')' => self.make_token(TokenType::RightParen),
+        let token = self.advance();
+        match token {
             b'{' => self.make_token(TokenType::LeftBrace),
             b'}' => self.make_token(TokenType::RightBrace),
             b'[' => self.make_token(TokenType::LeftBracket),
             b']' => self.make_token(TokenType::RightBracket),
-            b';' => self.make_token(TokenType::Semicolon),
             b',' => self.make_token(TokenType::Comma),
-            b'.' => self.make_token(TokenType::Dot),
             b'-' if self.match_advance(b'>') => self.make_token(TokenType::Arrow),
-            b'-' => self.make_token(TokenType::Minus),
-            b'+' => self.make_token(TokenType::Plus),
-            b'/' => self.make_token(TokenType::Slash),
-            b'*' => self.make_token(TokenType::Star),
-            b'!' if self.match_advance(b'=') => self.make_token(TokenType::BangEqual),
-            b'!' => self.make_token(TokenType::Bang),
-            b'=' if self.match_advance(b'=') => self.make_token(TokenType::EqualEqual),
             b'=' => self.make_token(TokenType::Equal),
-            b'<' if self.match_advance(b'=') => self.make_token(TokenType::LessEqual),
-            b'<' => self.make_token(TokenType::Less),
-            b'>' if self.match_advance(b'=') => self.make_token(TokenType::GreaterEqual),
-            b'>' => self.make_token(TokenType::Greater),
             b'"' => self.string(),
             c if c.is_ascii_digit() => self.number(),
             c if c.is_ascii_alphabetic() || c == b'_' => self.identifier(),
@@ -159,23 +142,57 @@ impl<'source> Scanner<'source> {
         match self.char_n(0) {
             b'a' => self.check_keyword(1, "nd", TokenType::And),
             b'c' => self.check_keyword(1, "all", TokenType::Call),
-            b'd' => self.check_keyword(1, "igraph", TokenType::Digraph),
-            b'e' => self.check_keyword(1, "lse", TokenType::Else),
             b'i' => self.check_keyword(1, "f", TokenType::If),
-            b'n' => self.check_keyword(1, "il", TokenType::Nil),
             b'o' => self.check_keyword(1, "r", TokenType::Or),
-            b'p' => self.check_keyword(1, "aram", TokenType::Param),
             b't' => self.check_keyword(1, "rue", TokenType::True),
             b'v' => self.check_keyword(1, "ar", TokenType::Var),
+            b'e' if self.len() > 1 => match self.char_n(1) {
+                b'l' => self.check_keyword(2, "se", TokenType::Else),
+                b'q' => self.check_keyword(2, "", TokenType::Equals),
+                _ => TokenType::Identifier,
+            },
             b'f' if self.len() > 1 => match self.char_n(1) {
                 b'n' => self.check_keyword(2, "", TokenType::Fn),
                 b'a' => self.check_keyword(2, "lse", TokenType::False),
+                _ => TokenType::Identifier,
+            },
+            b'p' if self.len() > 1 => match self.char_n(1) {
+                b'a' => self.check_keyword(2, "ram", TokenType::Param),
+                b'r' => self.check_keyword(2, "oduct", TokenType::Product),
+                _ => TokenType::Identifier,
+            },
+            b'd' if self.char_n(1) == b'i' && self.len() > 2 => match self.char_n(2) {
+                b'g' => self.check_keyword(3, "raph", TokenType::Digraph),
+                b'v' => self.check_keyword(3, "ide", TokenType::Divide),
+                _ => TokenType::Identifier,
+            },
+            b's' if self.char_n(1) == b'u' && self.len() > 2 => match self.char_n(2) {
+                b'b' => self.check_keyword(3, "tract", TokenType::Subtract),
+                b'm' => self.check_keyword(3, "", TokenType::Sum),
+                _ => TokenType::Identifier,
+            },
+            b'n' if self.len() > 1 => match self.char_n(1) {
+                b'e' if self.len() > 2 => match self.char_n(2) {
+                    b'g' => self.check_keyword(3, "ate", TokenType::Negate),
+                    b'q' => self.check_keyword(3, "q", TokenType::NotEquals),
+                    _ => TokenType::Identifier,
+                },
+                b'i' => self.check_keyword(2, "l", TokenType::Nil),
+                b'o' => self.check_keyword(2, "t", TokenType::Not),
                 _ => TokenType::Identifier,
             },
             b'r' if self.char_n(1) == b'e' && self.len() > 2 => match self.char_n(2) {
                 b'f' => self.check_keyword(3, "", TokenType::Ref),
                 b't' => self.check_keyword(3, "urn", TokenType::Return),
                 _ => TokenType::Identifier,
+            },
+            b'g' if self.char_n(1) == b't' => match self.len() {
+                2 => TokenType::Greater,
+                _ => self.check_keyword(2, "e", TokenType::GreaterEqual),
+            },
+            b'l' if self.char_n(1) == b't' => match self.len() {
+                2 => TokenType::Less,
+                _ => self.check_keyword(2, "e", TokenType::LessEqual),
             },
             _ => TokenType::Identifier,
         }
@@ -246,32 +263,34 @@ impl<'source> Token<'source> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, IntoPrimitive, EnumIter, EnumCount)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u8)]
 pub enum TokenType {
-    LeftParen,
-    RightParen,
+    // Unary
+    Not,
+    Negate,
+
+    // Binary
+    Subtract,
+    Divide,
+    Equals,       // eq
+    NotEquals,    // neq
+    Greater,      // gt
+    GreaterEqual, // gte
+    Less,         // lt
+    LessEqual,    // lte
+
+    // Variadic
+    Sum,
+    Product,
+
+    // One or two character tokens.
     LeftBrace,
     RightBrace,
     LeftBracket,
     RightBracket,
     Comma,
-    Dot,
-    Minus,
-    Plus,
-    Semicolon,
-    Slash,
-    Star,
-
-    // One or two character tokens.
-    Bang,
-    BangEqual,
     Equal,
-    EqualEqual,
-    Greater,
-    GreaterEqual,
-    Less,
-    LessEqual,
 
     // Literals.
     Identifier,

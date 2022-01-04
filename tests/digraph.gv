@@ -1,7 +1,11 @@
 digraph A {
-    fn_a [type=fn, label=a]
-    ref_a [label=a]
-    param [type=param]
-    param -> fn_a
-    "hello!" -> ref_a -> return
+    fn_a [type=fn, label=my_function]
+    ref_a [type=call, label=my_function]
+    param1 [type=param]
+    param2 [type=param]
+    param1 -> sum
+    param2 -> sum
+    sum -> fn_a
+    2 -> ref_a
+    1 -> ref_a -> return
 }

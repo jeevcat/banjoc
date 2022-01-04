@@ -84,12 +84,76 @@ impl<'source> Compiler<'source> {
             NodeType::VariableReference => self.named_variable(node.get_name())?,
             NodeType::FunctionCall { arguments } => self.call(ast, arguments)?,
             NodeType::Return { argument } => {
-                let node = ast.get_node(argument.unwrap()).unwrap();
-                self.node(ast, node)?;
+                let argument = ast.get_node(argument.unwrap()).unwrap();
+                self.node(ast, argument)?;
                 self.emit_return();
+            }
+            NodeType::Unary { argument } => {
+                let argument = ast.get_node(argument.unwrap()).unwrap();
+                self.node(ast, argument)?;
+                self.emit_unary(node.node_id.token_type);
+            }
+            NodeType::Binary { term_a, term_b } => {
+                for term in [term_a, term_b] {
+                    let term = ast.get_node(term.unwrap()).unwrap();
+                    self.node(ast, term)?;
+                }
+                self.emit_binary(node.node_id.token_type)
+            }
+            NodeType::Variadic { terms } => {
+                if terms.is_empty() {
+                    self.emit(OpCode::Nil);
+                } else {
+                    // For single term, don't apply an operator, just evaluate
+                    let first_term = ast.get_node(terms[0]).unwrap();
+                    self.node(ast, first_term)?;
+
+                    if terms.len() > 1 {
+                        for term in terms.iter().skip(1) {
+                            let term = ast.get_node(term).unwrap();
+                            self.node(ast, term)?;
+                        }
+                        self.emit_binary(node.node_id.token_type)
+                    }
+                }
             }
         }
         Ok(())
+    }
+
+    fn emit_unary(&mut self, operator_type: TokenType) {
+        // Emit the operator instruction.
+        match operator_type {
+            TokenType::Negate => self.emit(OpCode::Negate),
+            TokenType::Not => self.emit(OpCode::Not),
+            _ => unreachable!(),
+        }
+    }
+
+    fn emit_binary(&mut self, operator_type: TokenType) {
+        // Compile the operator
+        match operator_type {
+            TokenType::Subtract => self.emit(OpCode::Subtract),
+            TokenType::Divide => self.emit(OpCode::Divide),
+            TokenType::Equals => self.emit(OpCode::Equal),
+            TokenType::Greater => self.emit(OpCode::Greater),
+            TokenType::Less => self.emit(OpCode::Less),
+            TokenType::Sum => self.emit(OpCode::Add),
+            TokenType::Product => self.emit(OpCode::Multiply),
+            TokenType::NotEquals => {
+                self.emit(OpCode::Equal);
+                self.emit(OpCode::Not);
+            }
+            TokenType::GreaterEqual => {
+                self.emit(OpCode::Less);
+                self.emit(OpCode::Not);
+            }
+            TokenType::LessEqual => {
+                self.emit(OpCode::Greater);
+                self.emit(OpCode::Not);
+            }
+            _ => unreachable!(),
+        }
     }
 
     fn literal(&mut self, token: Token) -> Result<()> {
@@ -139,7 +203,6 @@ impl<'source> Compiler<'source> {
         body_node: &'source Node<'source>,
         name: Token<'source>,
     ) -> Result<()> {
-        println!("Declaring function named {}", name.lexeme);
         let global = self.declare_variable(name);
         self.compiler.mark_var_initialized();
         self.function(ast, body_node, name)?;
