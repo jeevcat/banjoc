@@ -44,15 +44,6 @@ impl Table {
         is_new_key
     }
 
-    pub fn append(&mut self, from: &Self) {
-        for i in 0..from.capacity() {
-            let entry = &from.entries[i];
-            if let Some(key) = entry.key {
-                self.insert(key, entry.value);
-            }
-        }
-    }
-
     pub fn get(&self, key: GcRef<LoxString>) -> Option<Value> {
         if self.count == 0 {
             return None;

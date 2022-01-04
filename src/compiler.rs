@@ -6,7 +6,7 @@ use crate::{
     func_compiler::FuncCompiler,
     gc::{Gc, GcRef},
     obj::Function,
-    op_code::{Constant, Jump, OpCode},
+    op_code::{Constant, OpCode},
     parser::{Ast, Node, NodeId, NodeType, Parser},
     scanner::{Token, TokenType},
     value::Value,
@@ -302,44 +302,6 @@ impl<'source> Compiler<'source> {
         Ok(Constant {
             slot: constant.try_into().unwrap(),
         })
-    }
-
-    fn emit_jump(&mut self, opcode: OpCode) -> usize {
-        self.emit(opcode);
-        self.current_chunk().code.len() - 1
-    }
-
-    fn patch_jump(&mut self, pos: usize) {
-        let offset = self.current_chunk().code.len() - 1 - pos;
-        let offset = match u16::try_from(offset) {
-            Ok(offset) => Jump { offset },
-            Err(_) => {
-                self.error_str("Too much code to jump over.");
-                Jump::none()
-            }
-        };
-
-        match self.current_chunk().code[pos] {
-            OpCode::JumpIfFalse(ref mut o) => *o = offset,
-            OpCode::Jump(ref mut o) => *o = offset,
-            _ => unreachable!(),
-        }
-    }
-
-    fn emit_loop(&mut self, start_pos: usize) {
-        let offset = self.current_chunk().code.len() - start_pos;
-        let offset = match u16::try_from(offset) {
-            Ok(o) => Jump { offset: o },
-            Err(_) => {
-                self.error_str("Loop body too large.");
-                Jump::none()
-            }
-        };
-        self.emit(OpCode::Loop(offset));
-    }
-
-    fn error_str(&mut self, message: &str) {
-        self.error_at(message);
     }
 
     fn error(&mut self, error: LoxError) {

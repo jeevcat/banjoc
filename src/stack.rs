@@ -68,11 +68,6 @@ where
         unsafe { self.data.get_unchecked(index).assume_init_ref() }
     }
 
-    pub fn write(&mut self, index: usize, value: T) {
-        debug_assert!(index < self.index);
-        unsafe { *self.data.get_unchecked_mut(index) = MaybeUninit::new(value) };
-    }
-
     pub fn top(&mut self) -> &mut T {
         debug_assert!(self.index > 0);
         unsafe {

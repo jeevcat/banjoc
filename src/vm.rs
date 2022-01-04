@@ -9,7 +9,7 @@ use crate::{
     error::{LoxError, Result},
     gc::{GarbageCollect, Gc, GcRef},
     obj::{Function, LoxString, NativeFn, NativeFunction},
-    op_code::{Constant, Jump, LocalIndex},
+    op_code::{Constant, LocalIndex},
     stack::Stack,
     table::Table,
 };
@@ -132,7 +132,6 @@ impl Vm {
                 }
                 OpCode::Greater => self.binary_op(|a, b| Value::Bool(a > b))?,
                 OpCode::Less => self.binary_op(|a, b| Value::Bool(a < b))?,
-                OpCode::Print => println!("{}", self.stack.pop()),
                 OpCode::Pop => {
                     self.stack.pop();
                 }
@@ -152,19 +151,6 @@ impl Vm {
                 OpCode::GetLocal(offset) => {
                     let offset = self.current_frame().read_local_offset(offset);
                     self.stack.push(*self.stack.read(offset));
-                }
-                OpCode::JumpIfFalse(jump) => {
-                    if self.stack.peek(0).is_falsey() {
-                        self.current_frame().jump(jump);
-                    }
-                }
-                OpCode::Jump(jump) => {
-                    let frame = self.current_frame();
-                    frame.jump(jump);
-                }
-                OpCode::Loop(jump) => {
-                    let frame = self.current_frame();
-                    frame.jump_backwards(jump);
                 }
                 OpCode::Call { arg_count } => {
                     let arg_count = arg_count as usize;
@@ -325,15 +311,6 @@ impl CallFrame {
 
     fn read_local_offset(&mut self, local: LocalIndex) -> usize {
         self.slot + (local as usize)
-    }
-
-    fn jump(&mut self, jump: Jump) {
-        self.ip = unsafe { self.ip.offset(jump.offset as isize) };
-    }
-
-    fn jump_backwards(&mut self, jump: Jump) {
-        let offset = -1 - (jump.offset as isize);
-        self.ip = unsafe { self.ip.offset(offset) };
     }
 }
 
