@@ -7,7 +7,7 @@ use crate::{
     gc::{Gc, GcRef},
     obj::Function,
     op_code::{Constant, Jump, OpCode},
-    parser::{Ast, Node, NodeType, Parser},
+    parser::{Ast, Node, NodeId, NodeType, Parser},
     scanner::{Token, TokenType},
     value::Value,
 };
@@ -19,7 +19,7 @@ pub fn compile(source: &str, vm: &mut Gc) -> Result<GcRef<Function>> {
 
     compiler.compile(&ast);
 
-    let function = compiler.pop_graph_compiler().function;
+    let function = compiler.pop_func_compiler().function;
 
     if compiler.had_error {
         Err(LoxError::CompileError("Parser error."))
@@ -47,69 +47,76 @@ impl<'source> Compiler<'source> {
     }
 
     fn compile(&mut self, ast: &'source Ast<'source>) {
-        // self.push_graph_compiler(ast.name)
         self.begin_scope();
         for node in ast.get_definitions() {
-            self.node(ast, node);
+            self.compile_node(ast, node);
         }
 
         let return_node = ast.get_return_node();
-        self.node(ast, return_node);
+        self.compile_node(ast, return_node);
         self.end_scope();
     }
 
-    fn node(&mut self, ast: &'source Ast<'source>, node: &'source Node<'source>) {
-        match &node.node_type {
-            NodeType::Literal => self.literal(node.get_name()),
-            NodeType::Definition { body, arity } => {
-                let body_node = ast.get_node(body.unwrap()).unwrap();
-                if *arity > 0 {
-                    todo!();
-                } else {
-                    self.var_declaration(ast, body_node, node.get_name());
-                }
-            }
-            NodeType::Param => todo!(),
-            NodeType::Var => self.variable(node.get_name()),
-            NodeType::Fn { arguments } => todo!(),
-            NodeType::Return { argument } => {
-                let node = ast.get_node(argument.unwrap()).unwrap();
-                self.node(ast, node);
-                self.emit_return();
-            }
+    fn compile_node(&mut self, ast: &'source Ast<'source>, node: &'source Node<'source>) {
+        // If a node fails to compile, surface the error but continue compilation
+        if let Err(error) = self.node(ast, node) {
+            self.error(error);
         }
     }
 
-    fn literal(&mut self, token: Token) {
+    fn node(&mut self, ast: &'source Ast<'source>, node: &'source Node<'source>) -> Result<()> {
+        // TODO unwraps below
+        match &node.node_type {
+            NodeType::Literal => self.literal(node.get_name())?,
+            NodeType::FunctionDefinition { body, .. } => {
+                let body_node = ast.get_node(body.unwrap()).unwrap();
+                self.fun_declaration(ast, body_node, node.get_name())?
+            }
+            NodeType::VariableDefinition { body } => {
+                let body_node = ast.get_node(body.unwrap()).unwrap();
+                self.var_declaration(ast, body_node, node.get_name())?
+            }
+            NodeType::Param => {
+                self.compiler.increment_arity()?;
+                self.declare_local_variable(node.get_name())?;
+                self.compiler.mark_var_initialized();
+            }
+            NodeType::VariableReference => self.named_variable(node.get_name())?,
+            NodeType::FunctionCall { arguments } => self.call(ast, arguments)?,
+            NodeType::Return { argument } => {
+                let node = ast.get_node(argument.unwrap()).unwrap();
+                self.node(ast, node)?;
+                self.emit_return();
+            }
+        }
+        Ok(())
+    }
+
+    fn literal(&mut self, token: Token) -> Result<()> {
         match token.token_type {
             TokenType::False => self.emit(OpCode::False),
             TokenType::Nil => self.emit(OpCode::Nil),
             TokenType::True => self.emit(OpCode::True),
-            TokenType::Number => self.number(token),
-            TokenType::String => self.string(token),
+            TokenType::Number => self.number(token)?,
+            TokenType::String => self.string(token)?,
             _ => unreachable!(),
         }
+        Ok(())
     }
 
-    fn number(&mut self, token: Token) {
+    fn number(&mut self, token: Token) -> Result<()> {
         let value: f64 = token.lexeme.parse().unwrap();
         self.emit_constant(Value::Number(value))
     }
 
-    fn string(&mut self, token: Token) {
+    fn string(&mut self, token: Token) -> Result<()> {
         let string = &token.lexeme[1..token.lexeme.len() - 1];
         let value = Value::String(self.gc.intern(string));
-        self.emit_constant(value);
+        self.emit_constant(value)
     }
 
     fn current_chunk(&mut self) -> &mut Chunk {
         &mut self.compiler.function.chunk
-    }
-
-    fn variable(&mut self, name: Token) {
-        if let Err(err) = self.named_variable(name) {
-            self.error(err)
-        }
     }
 
     fn named_variable(&mut self, name: Token) -> Result<()> {
@@ -117,7 +124,7 @@ impl<'source> Compiler<'source> {
             if let Some(index) = self.compiler.resolve_local(name)? {
                 OpCode::GetLocal(index)
             } else {
-                let constant = self.identifier_constant(name);
+                let constant = self.identifier_constant(name)?;
                 OpCode::GetGlobal(constant)
             }
         };
@@ -126,38 +133,87 @@ impl<'source> Compiler<'source> {
         Ok(())
     }
 
+    fn fun_declaration(
+        &mut self,
+        ast: &'source Ast<'source>,
+        body_node: &'source Node<'source>,
+        name: Token<'source>,
+    ) -> Result<()> {
+        println!("Declaring function named {}", name.lexeme);
+        let global = self.declare_variable(name);
+        self.compiler.mark_var_initialized();
+        self.function(ast, body_node, name)?;
+        self.define_variable(global);
+        Ok(())
+    }
+
+    fn function(
+        &mut self,
+        ast: &'source Ast<'source>,
+        body_node: &'source Node<'source>,
+        name: Token<'source>,
+    ) -> Result<()> {
+        self.push_func_compiler(name.lexeme);
+        self.begin_scope();
+
+        self.node(ast, body_node)?;
+
+        // Because we end the compiler completely, there’s no need to close the lingering outermost scope with end_scope().
+        let FuncCompiler { function, .. } = self.pop_func_compiler();
+        let value = Value::Function(self.gc.alloc(function));
+
+        let constant = self.make_constant(value)?;
+        self.emit(OpCode::Function(constant));
+        Ok(())
+    }
+
+    fn call(&mut self, ast: &'source Ast, arguments: &[NodeId<'source>]) -> Result<()> {
+        for arg in arguments {
+            let arg = ast.get_node(arg).unwrap();
+            self.node(ast, arg)?;
+        }
+        self.emit(OpCode::Call {
+            arg_count: arguments.len() as u8,
+        });
+        Ok(())
+    }
+
     fn var_declaration(
         &mut self,
         ast: &'source Ast<'source>,
         body_node: &'source Node<'source>,
         name: Token<'source>,
-    ) {
-        let global = self.parse_variable(name);
+    ) -> Result<()> {
+        let global = self.declare_variable(name);
 
-        self.node(ast, body_node);
+        self.node(ast, body_node)?;
 
         self.define_variable(global);
+        Ok(())
     }
 
-    fn parse_variable(&mut self, name: Token<'source>) -> Option<Constant> {
+    /// Declare existance of local or global variable, not yet assigning a value
+    fn declare_variable(&mut self, name: Token<'source>) -> Option<Constant> {
         // At runtime, locals aren’t looked up by name.
         // There’s no need to stuff the variable’s name into the constant table, so if the declaration is inside a local scope, we return None instead.
         if self.compiler.is_local_scope() {
-            self.declare_local_variable(name);
+            self.declare_local_variable(name).ok()?;
             None
         } else {
-            Some(self.identifier_constant(name))
+            Some(self.identifier_constant(name).ok()?)
         }
     }
 
-    fn declare_local_variable(&mut self, name: Token<'source>) {
+    fn declare_local_variable(&mut self, name: Token<'source>) -> Result<()> {
         debug_assert!(self.compiler.is_local_scope());
 
         if self.compiler.is_local_already_in_scope(name) {
-            self.error_str("Already a variable with this name in this scope.");
+            return Err(LoxError::CompileError(
+                "Already a variable with this name in this scope.",
+            ));
         }
 
-        self.add_local(name);
+        self.compiler.add_local(name)
     }
 
     fn define_variable(&mut self, global: Option<Constant>) {
@@ -170,25 +226,22 @@ impl<'source> Compiler<'source> {
         }
     }
 
-    fn add_local(&mut self, name: Token<'source>) {
-        if let Err(err) = self.compiler.add_local(name) {
-            self.error(err)
-        }
-    }
-
-    fn identifier_constant(&mut self, name: Token) -> Constant {
+    fn identifier_constant(&mut self, name: Token) -> Result<Constant> {
         let value = Value::String(self.gc.intern(name.lexeme));
         self.make_constant(value)
     }
 
-    fn push_graph_compiler(&mut self, graph_name: &str) {
-        let graph_name = self.gc.intern(graph_name);
+    fn push_func_compiler(&mut self, func_name: &str) {
+        let graph_name = self.gc.intern(func_name);
         let new_compiler = Box::new(FuncCompiler::new(Some(graph_name)));
         let old_compiler = mem::replace(&mut self.compiler, new_compiler);
         self.compiler.enclosing = Some(old_compiler);
     }
 
-    fn pop_graph_compiler(&mut self) -> FuncCompiler {
+    fn pop_func_compiler(&mut self) -> FuncCompiler {
+        // #TODO can we include the return in the OpCode::Call?
+        self.emit_return();
+
         #[cfg(feature = "debug_print_code")]
         {
             if !self.had_error {
@@ -230,25 +283,25 @@ impl<'source> Compiler<'source> {
         self.current_chunk().write(opcode)
     }
 
-    fn emit_constant(&mut self, value: Value) {
-        let slot = self.make_constant(value);
+    fn emit_constant(&mut self, value: Value) -> Result<()> {
+        let slot = self.make_constant(value)?;
         self.emit(OpCode::Constant(slot));
+        Ok(())
     }
 
     fn emit_return(&mut self) {
         self.emit(OpCode::Return);
     }
 
-    fn make_constant(&mut self, value: Value) -> Constant {
+    fn make_constant(&mut self, value: Value) -> Result<Constant> {
         let constant = self.current_chunk().add_constant(value);
         if constant > u8::MAX.into() {
             // TODO we'd want to add another instruction like OpCode::Constant16 which stores the index as a two-byte operand when this limit is hit
-            self.error_str("Too many constants in one chunk.");
-            return Constant::none();
+            return Err(LoxError::CompileError("Too many constants in one chunk."));
         }
-        Constant {
+        Ok(Constant {
             slot: constant.try_into().unwrap(),
-        }
+        })
     }
 
     fn emit_jump(&mut self, opcode: OpCode) -> usize {

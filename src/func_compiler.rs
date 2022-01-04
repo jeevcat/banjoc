@@ -27,7 +27,6 @@ impl<'source> FuncCompiler<'source> {
         locals.push(Local {
             name,
             depth: Some(0),
-            is_captured: false,
         });
 
         Self {
@@ -54,11 +53,7 @@ impl<'source> FuncCompiler<'source> {
         }
 
         // Only "declare" for now, by assigning sentinel value
-        self.locals.push(Local {
-            name,
-            depth: None,
-            is_captured: false,
-        });
+        self.locals.push(Local { name, depth: None });
 
         Ok(())
     }
@@ -97,10 +92,6 @@ impl<'source> FuncCompiler<'source> {
         self.scope_depth > 0
     }
 
-    pub fn get_local(&self) -> &Local {
-        self.locals.last().unwrap()
-    }
-
     /// Are there locals stored in the current scope?
     pub fn has_local_in_scope(&self) -> bool {
         if let Some(depth) = self.locals.last().and_then(|x| x.depth) {
@@ -125,6 +116,18 @@ impl<'source> FuncCompiler<'source> {
         }
         false
     }
+
+    pub fn increment_arity(&mut self) -> Result<()> {
+        self.function.arity += 1;
+
+        if self.function.arity > 255 {
+            Err(LoxError::CompileError(
+                "Can't have more than 255 parameters.",
+            ))
+        } else {
+            Ok(())
+        }
+    }
 }
 
 pub struct Local<'source> {
@@ -132,7 +135,6 @@ pub struct Local<'source> {
     /// The scope depth of the block where the local variable was declared
     /// None means declared but not defined
     depth: Option<u32>,
-    pub is_captured: bool,
 }
 
 impl<'source> Local<'source> {

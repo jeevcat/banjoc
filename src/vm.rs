@@ -149,20 +149,9 @@ impl Vm {
                         self.runtime_error(&format!("Undefined variable '{}'.", name.as_str()))?
                     }
                 }
-                OpCode::SetGlobal(constant) => {
-                    let name = self.read_string(constant);
-                    if self.globals.insert(name, *self.stack.peek(0)) {
-                        self.globals.remove(name);
-                        self.runtime_error(&format!("Undefined variable '{}'.", name.as_str()))?
-                    }
-                }
                 OpCode::GetLocal(offset) => {
                     let offset = self.current_frame().read_local_offset(offset);
                     self.stack.push(*self.stack.read(offset));
-                }
-                OpCode::SetLocal(offset) => {
-                    let offset = self.current_frame().read_local_offset(offset);
-                    self.stack.write(offset, *self.stack.peek(0));
                 }
                 OpCode::JumpIfFalse(jump) => {
                     if self.stack.peek(0).is_falsey() {
@@ -180,6 +169,11 @@ impl Vm {
                 OpCode::Call { arg_count } => {
                     let arg_count = arg_count as usize;
                     self.call_value(*self.stack.peek(arg_count), arg_count)?;
+                }
+                OpCode::Function(constant) => {
+                    // Load the compiled function from the constant table
+                    let function = self.current_frame().read_constant(constant);
+                    self.stack.push(function);
                 }
             }
         }

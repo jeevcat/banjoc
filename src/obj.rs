@@ -1,7 +1,4 @@
-use std::{
-    fmt::{self, Display, Formatter, Write},
-    ops::Deref,
-};
+use std::fmt::{self, Display, Formatter, Write};
 
 use crate::{
     chunk::Chunk,

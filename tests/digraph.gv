@@ -1,6 +1,7 @@
 digraph A {
-    def_a [type=def, label=a]
+    fn_a [type=fn, label=a]
     ref_a [label=a]
-    "hello!" -> def_a
-    ref_a -> return
+    param [type=param]
+    param -> fn_a
+    "hello!" -> ref_a -> return
 }

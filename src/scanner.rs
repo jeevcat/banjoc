@@ -147,25 +147,34 @@ impl<'source> Scanner<'source> {
         self.make_token(self.identifier_type())
     }
 
+    fn char_n(&self, n: usize) -> u8 {
+        self.source.as_bytes()[self.start + n]
+    }
+
+    fn len(&self) -> usize {
+        self.current - self.start
+    }
+
     fn identifier_type(&self) -> TokenType {
-        match self.source.as_bytes()[self.start] {
+        match self.char_n(0) {
             b'a' => self.check_keyword(1, "nd", TokenType::And),
+            b'c' => self.check_keyword(1, "all", TokenType::Call),
+            b'd' => self.check_keyword(1, "igraph", TokenType::Digraph),
             b'e' => self.check_keyword(1, "lse", TokenType::Else),
             b'i' => self.check_keyword(1, "f", TokenType::If),
             b'n' => self.check_keyword(1, "il", TokenType::Nil),
             b'o' => self.check_keyword(1, "r", TokenType::Or),
-            b'r' => self.check_keyword(1, "eturn", TokenType::Return),
             b'p' => self.check_keyword(1, "aram", TokenType::Param),
             b't' => self.check_keyword(1, "rue", TokenType::True),
             b'v' => self.check_keyword(1, "ar", TokenType::Var),
-            b'd' if self.current - self.start > 1 => match self.source.as_bytes()[self.start + 1] {
-                b'e' => self.check_keyword(2, "f", TokenType::Def),
-                b'i' => self.check_keyword(2, "graph", TokenType::Digraph),
+            b'f' if self.len() > 1 => match self.char_n(1) {
+                b'n' => self.check_keyword(2, "", TokenType::Fn),
+                b'a' => self.check_keyword(2, "lse", TokenType::False),
                 _ => TokenType::Identifier,
             },
-            b'f' if self.current - self.start > 1 => match self.source.as_bytes()[self.start + 1] {
-                b'a' => self.check_keyword(2, "lse", TokenType::False),
-                b'n' => TokenType::Fn,
+            b'r' if self.char_n(1) == b'e' && self.len() > 2 => match self.char_n(2) {
+                b'f' => self.check_keyword(3, "", TokenType::Ref),
+                b't' => self.check_keyword(3, "urn", TokenType::Return),
                 _ => TokenType::Identifier,
             },
             _ => TokenType::Identifier,
@@ -174,7 +183,7 @@ impl<'source> Scanner<'source> {
 
     fn check_keyword(&self, start: usize, rest: &str, token_type: TokenType) -> TokenType {
         // Same length
-        if self.current - self.start == start + rest.len() {
+        if self.len() == start + rest.len() {
             let start_index = self.start + start;
             let end_index = start_index + rest.len();
             // Same bytes
@@ -278,9 +287,14 @@ pub enum TokenType {
     True,
     Nil,
 
-    Def,
-    Var,
+    // Define function
     Fn,
+    // Call function
+    Call,
+    // Define variable
+    Var,
+    // Reference variable
+    Ref,
     Param,
     Return,
     Digraph,

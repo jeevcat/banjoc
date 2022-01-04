@@ -28,10 +28,12 @@ impl<'source> Ast<'source> {
 
     pub fn get_definitions(&self) -> impl Iterator<Item = &Node> {
         // TODO perf
-        self.all_nodes
-            .iter()
-            .map(|(_, node)| node)
-            .filter(|node| matches!(node.node_type, NodeType::Definition { .. }))
+        self.all_nodes.iter().map(|(_, node)| node).filter(|node| {
+            matches!(
+                node.node_type,
+                NodeType::VariableDefinition { .. } | NodeType::FunctionDefinition { .. }
+            )
+        })
     }
 
     fn ensure_node(
@@ -81,16 +83,17 @@ impl<'source> Node<'source> {
 #[derive(Debug)]
 pub enum NodeType<'source> {
     Literal,
-    // A variable definition is a function definition with arity=0
-    Definition {
+    VariableDefinition {
+        body: Option<NodeId<'source>>,
+    },
+    FunctionDefinition {
         body: Option<NodeId<'source>>,
         arity: u8,
     },
     Param,
-    /// A reference to a variable
-    Var,
+    VariableReference,
     /// A reference to a function
-    Fn {
+    FunctionCall {
         arguments: Vec<NodeId<'source>>,
     },
     Return {
@@ -107,20 +110,18 @@ impl<'source> NodeType<'source> {
         if let Some(node) = Self::from_name(node_id, attributes) {
             return node;
         }
-        NodeType::Definition {
-            body: None,
-            arity: 0,
-        }
+        NodeType::VariableDefinition { body: None }
     }
 
     fn from_type_attribute<'a>(attributes: Option<&Attributes<'a>>) -> Option<NodeType<'a>> {
         Some(match attributes?.node_type?.token_type {
-            TokenType::Def => NodeType::Definition {
+            TokenType::Fn => NodeType::FunctionDefinition {
                 body: None,
                 arity: 0,
             },
-            TokenType::Fn => NodeType::Fn { arguments: vec![] },
-            TokenType::Var => NodeType::Var,
+            TokenType::Call => NodeType::FunctionCall { arguments: vec![] },
+            TokenType::Var => NodeType::VariableDefinition { body: None },
+            TokenType::Ref => NodeType::VariableReference,
             TokenType::Param => NodeType::Param,
             TokenType::Return => NodeType::Return { argument: None },
             _ => return None,
@@ -146,16 +147,24 @@ impl<'source> NodeType<'source> {
 
     fn add_input(&mut self, input: NodeId<'source>) -> Result<()> {
         match self {
-            NodeType::Var => {
-                *self = NodeType::Fn {
+            NodeType::VariableReference => {
+                *self = NodeType::FunctionCall {
                     arguments: vec![input],
                 }
             }
-            NodeType::Fn { arguments } => arguments.push(input),
-            NodeType::Definition { body, .. } => match body {
+            NodeType::VariableDefinition { body, .. } => match body {
                 Some(_) => {
                     return Err(LoxError::CompileError(
-                        "A variable or function definition can only have 1 input.",
+                        "A variable definition can only have 1 input.",
+                    ))
+                }
+                None => *body = Some(input),
+            },
+            NodeType::FunctionCall { arguments } => arguments.push(input),
+            NodeType::FunctionDefinition { body, .. } => match body {
+                Some(_) => {
+                    return Err(LoxError::CompileError(
+                        "A function definition can only have 1 input.",
                     ))
                 }
                 None => *body = Some(input),
@@ -176,12 +185,12 @@ impl<'source> NodeType<'source> {
 
     fn add_output(&mut self) -> Result<()> {
         match self {
-            NodeType::Definition { body, .. } => {
+            NodeType::VariableDefinition { body, .. } => {
                 *self = match body {
-                    Some(body) => NodeType::Fn {
+                    Some(body) => NodeType::FunctionCall {
                         arguments: vec![body],
                     },
-                    None => NodeType::Var,
+                    None => NodeType::VariableReference,
                 }
             }
             NodeType::Return { .. } => {
@@ -439,7 +448,7 @@ mod tests {
             } => {
                 let b = graph.get_node(argument).unwrap();
                 match &b.node_type {
-                    NodeType::Fn { arguments } => {
+                    NodeType::FunctionCall { arguments } => {
                         let literal = graph.get_node(arguments[0]).unwrap();
                         assert_eq!(literal.node_id.lexeme, "10");
                         match literal.node_type {
@@ -463,9 +472,8 @@ mod tests {
             let node = graph.get_node(node_id).unwrap();
             assert_eq!(node_id, node.node_id.lexeme);
             match node.node_type {
-                NodeType::Definition { body, arity } => {
+                NodeType::VariableDefinition { body } => {
                     assert!(body.is_none());
-                    assert_eq!(arity, 0);
                 }
                 _ => panic!(),
             }
@@ -479,7 +487,10 @@ mod tests {
         let graph = parser.parse().unwrap();
         let node = graph.get_node("a").unwrap();
         assert_eq!(node.node_id.lexeme, "a");
-        assert!(matches!(node.node_type, NodeType::Definition { .. }));
+        assert!(matches!(
+            node.node_type,
+            NodeType::VariableDefinition { .. }
+        ));
         assert_eq!(node.attributes.comment.unwrap().lexeme, "\"hi\"");
     }
 
@@ -491,18 +502,14 @@ mod tests {
 
         let a = graph.get_node("a").unwrap();
         assert_eq!(a.node_id.lexeme, "a");
-        assert!(matches!(a.node_type, NodeType::Var));
+        assert!(matches!(a.node_type, NodeType::VariableReference));
         assert_eq!(a.attributes.label.unwrap().lexeme, "2.5");
 
         let b = graph.get_node("b").unwrap();
         assert_eq!(b.node_id.lexeme, "b");
         match b.node_type {
-            NodeType::Definition {
-                body: Some(body),
-                arity,
-            } => {
+            NodeType::VariableDefinition { body: Some(body) } => {
                 assert_eq!(body, "a");
-                assert_eq!(arity, 0);
             }
             _ => panic!(),
         };
@@ -510,40 +517,24 @@ mod tests {
     }
 
     #[test]
-    fn deduce_types() {
+    fn deduce_literal_types() {
         let source = r#"
             digraph {
-                1
+                3.14
                 "hi"
-                return
-                defn1
-                var1
-                fn1
-                ret1 [label=return]
                 num1 [label=1]
                 string2 [label="stringy"]
-                1 -> defn1
-                var1 -> ret1
-                fn1 -> fn1
             }
         "#;
         let parser = Parser::new(source);
         let graph = parser.parse().unwrap();
         assert!(matches!(
-            graph.get_node("1").unwrap().node_type,
+            graph.get_node("3.14").unwrap().node_type,
             NodeType::Literal
         ));
         assert!(matches!(
             graph.get_node("\"hi\"").unwrap().node_type,
             NodeType::Literal
-        ));
-        assert!(matches!(
-            graph.get_node("return").unwrap().node_type,
-            NodeType::Return { .. }
-        ));
-        assert!(matches!(
-            graph.get_node("ret1").unwrap().node_type,
-            NodeType::Return { .. }
         ));
         assert!(matches!(
             graph.get_node("num1").unwrap().node_type,
@@ -553,17 +544,43 @@ mod tests {
             graph.get_node("string2").unwrap().node_type,
             NodeType::Literal
         ));
+    }
+
+    #[test]
+    fn deduce_types() {
+        let source = r#"
+            digraph {
+                return
+                var1
+                ref1
+                fn1
+                ret1 [label=return]
+                1 -> var1
+                ref1 -> ret1
+                fn1 -> fn1
+            }
+        "#;
+        let parser = Parser::new(source);
+        let graph = parser.parse().unwrap();
         assert!(matches!(
-            graph.get_node("defn1").unwrap().node_type,
-            NodeType::Definition { .. }
+            graph.get_node("return").unwrap().node_type,
+            NodeType::Return { .. }
+        ));
+        assert!(matches!(
+            graph.get_node("ret1").unwrap().node_type,
+            NodeType::Return { .. }
         ));
         assert!(matches!(
             graph.get_node("var1").unwrap().node_type,
-            NodeType::Var
+            NodeType::VariableDefinition { .. }
+        ));
+        assert!(matches!(
+            graph.get_node("ref1").unwrap().node_type,
+            NodeType::VariableReference
         ));
         assert!(matches!(
             graph.get_node("fn1").unwrap().node_type,
-            NodeType::Fn { .. }
+            NodeType::FunctionCall { .. }
         ));
     }
 
@@ -571,33 +588,38 @@ mod tests {
     fn explicit_types() {
         let source = r#"
             digraph {
-                a [type=def]
-                b [type=fn]
-                c [type=var]
-                d [type=return]
-                e [type=param]
+                a [type=fn]
+                b [type=var]
+                c [type=call]
+                d [type=ref]
+                e [type=return]
+                f [type=param]
             }
         "#;
         let parser = Parser::new(source);
         let graph = parser.parse().unwrap();
         assert!(matches!(
             graph.get_node("a").unwrap().node_type,
-            NodeType::Definition { .. }
+            NodeType::FunctionDefinition { .. }
         ));
         assert!(matches!(
             graph.get_node("b").unwrap().node_type,
-            NodeType::Fn { .. }
+            NodeType::VariableDefinition { .. }
         ));
         assert!(matches!(
             graph.get_node("c").unwrap().node_type,
-            NodeType::Var
+            NodeType::FunctionCall { .. }
         ));
         assert!(matches!(
             graph.get_node("d").unwrap().node_type,
-            NodeType::Return { .. }
+            NodeType::VariableReference { .. }
         ));
         assert!(matches!(
             graph.get_node("e").unwrap().node_type,
+            NodeType::Return { .. }
+        ));
+        assert!(matches!(
+            graph.get_node("f").unwrap().node_type,
             NodeType::Param
         ));
     }

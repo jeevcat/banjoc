@@ -51,10 +51,8 @@ pub enum OpCode {
     Constant(Constant),
     DefineGlobal(Constant),
     GetGlobal(Constant),
-    SetGlobal(Constant),
 
     GetLocal(LocalIndex),
-    SetLocal(LocalIndex),
 
     JumpIfFalse(Jump),
     Jump(Jump),
@@ -63,4 +61,5 @@ pub enum OpCode {
     Call {
         arg_count: u8,
     },
+    Function(Constant),
 }

@@ -45,15 +45,12 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> usize {
         OpCode::GetGlobal(constant) => {
             constant_instruction("OP_GET_GLOBAL", chunk, offset, constant)
         }
-        OpCode::SetGlobal(constant) => {
-            constant_instruction("OP_SET_GLOBAL", chunk, offset, constant)
-        }
         OpCode::GetLocal(index) => byte_instruction("OP_GET_LOCAL", offset, index),
-        OpCode::SetLocal(index) => byte_instruction("OP_SET_LOCAL", offset, index),
         OpCode::JumpIfFalse(jump) => jump_instruction("OP_JUMP_IF_FALSE", 1, offset, jump),
         OpCode::Jump(jump) => jump_instruction("OP_JUMP", 1, offset, jump),
         OpCode::Loop(jump) => jump_instruction("OP_LOOP", -1, offset, jump),
         OpCode::Call { arg_count } => byte_instruction("OP_CALL", offset, arg_count),
+        OpCode::Function(constant) => constant_instruction("OP_FUNCTION", chunk, offset, constant),
     }
 }
 
