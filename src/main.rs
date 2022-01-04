@@ -12,8 +12,8 @@ mod compiler;
 #[cfg(any(feature = "debug_trace_execution", feature = "debug_print_code"))]
 mod disassembler;
 mod error;
+mod func_compiler;
 mod gc;
-mod graph_compiler;
 mod obj;
 mod op_code;
 mod parser;
@@ -34,7 +34,9 @@ fn repl(vm: &mut Vm) {
         if line.is_empty() {
             break;
         }
-        vm.interpret(&line).ok();
+        if let Ok(result) = vm.interpret(&line) {
+            println!("{}", result);
+        }
     }
 }
 
@@ -46,8 +48,9 @@ fn run_file(vm: &mut Vm, path: &str) {
             process::exit(74);
         }
     };
-    if let Err(error) = vm.interpret(&code) {
-        match error {
+    match vm.interpret(&code) {
+        Ok(result) => println!("{}", result),
+        Err(error) => match error {
             LoxError::CompileError(_) => {
                 process::exit(65);
             }
@@ -55,7 +58,7 @@ fn run_file(vm: &mut Vm, path: &str) {
                 eprintln!("Runtime error.");
                 process::exit(70);
             }
-        }
+        },
     }
 }
 

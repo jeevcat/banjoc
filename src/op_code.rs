@@ -21,7 +21,6 @@ impl Jump {
 }
 
 pub type LocalIndex = u8;
-pub type UpvalueIndex = u8;
 
 #[derive(Clone, Copy)]
 pub enum OpCode {
@@ -57,9 +56,6 @@ pub enum OpCode {
     GetLocal(LocalIndex),
     SetLocal(LocalIndex),
 
-    GetUpvalue(UpvalueIndex),
-    SetUpvalue(UpvalueIndex),
-
     JumpIfFalse(Jump),
     Jump(Jump),
     Loop(Jump),
@@ -67,6 +63,4 @@ pub enum OpCode {
     Call {
         arg_count: u8,
     },
-    Closure(Constant),
-    CloseUpvalue,
 }

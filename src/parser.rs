@@ -491,7 +491,7 @@ mod tests {
 
         let a = graph.get_node("a").unwrap();
         assert_eq!(a.node_id.lexeme, "a");
-        assert!(matches!(a.node_type, NodeType::Fn { .. }));
+        assert!(matches!(a.node_type, NodeType::Var));
         assert_eq!(a.attributes.label.unwrap().lexeme, "2.5");
 
         let b = graph.get_node("b").unwrap();

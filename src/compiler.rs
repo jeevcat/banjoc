@@ -3,34 +3,34 @@ use std::mem::{self};
 use crate::{
     chunk::Chunk,
     error::{LoxError, Result},
+    func_compiler::FuncCompiler,
     gc::{Gc, GcRef},
-    graph_compiler::GraphCompiler,
-    obj::Graph,
+    obj::Function,
     op_code::{Constant, Jump, OpCode},
     parser::{Ast, Node, NodeType, Parser},
     scanner::{Token, TokenType},
     value::Value,
 };
 
-pub fn compile(source: &str, vm: &mut Gc) -> Result<GcRef<Graph>> {
+pub fn compile(source: &str, vm: &mut Gc) -> Result<GcRef<Function>> {
     let parser = Parser::new(source);
     let ast = parser.parse()?;
     let mut compiler = Compiler::new(vm);
 
     compiler.compile(&ast);
 
-    let graph = compiler.pop_graph_compiler().graph;
+    let function = compiler.pop_graph_compiler().function;
 
     if compiler.had_error {
         Err(LoxError::CompileError("Parser error."))
     } else {
-        Ok(vm.alloc(graph))
+        Ok(vm.alloc(function))
     }
 }
 
 struct Compiler<'source> {
     // TODO: this should be an option
-    compiler: Box<GraphCompiler<'source>>,
+    compiler: Box<FuncCompiler<'source>>,
     gc: &'source mut Gc,
     had_error: bool,
     panic_mode: bool,
@@ -39,7 +39,7 @@ struct Compiler<'source> {
 impl<'source> Compiler<'source> {
     fn new(gc: &'source mut Gc) -> Compiler<'source> {
         Self {
-            compiler: Box::new(GraphCompiler::new(None)),
+            compiler: Box::new(FuncCompiler::new(None)),
             gc,
             had_error: false,
             panic_mode: false,
@@ -47,9 +47,9 @@ impl<'source> Compiler<'source> {
     }
 
     fn compile(&mut self, ast: &'source Ast<'source>) {
+        // self.push_graph_compiler(ast.name)
         self.begin_scope();
         for node in ast.get_definitions() {
-            dbg!(node);
             self.node(ast, node);
         }
 
@@ -103,21 +103,19 @@ impl<'source> Compiler<'source> {
     }
 
     fn current_chunk(&mut self) -> &mut Chunk {
-        &mut self.compiler.graph.chunk
+        &mut self.compiler.function.chunk
     }
-    
+
     fn variable(&mut self, name: Token) {
         if let Err(err) = self.named_variable(name) {
             self.error(err)
         }
     }
-    
+
     fn named_variable(&mut self, name: Token) -> Result<()> {
-        let get_opcode  = {
+        let get_opcode = {
             if let Some(index) = self.compiler.resolve_local(name)? {
                 OpCode::GetLocal(index)
-            } else if let Some(index) = self.compiler.resolve_upvalue(name)? {
-                OpCode::GetUpvalue(index)
             } else {
                 let constant = self.identifier_constant(name);
                 OpCode::GetGlobal(constant)
@@ -185,23 +183,23 @@ impl<'source> Compiler<'source> {
 
     fn push_graph_compiler(&mut self, graph_name: &str) {
         let graph_name = self.gc.intern(graph_name);
-        let new_compiler = Box::new(GraphCompiler::new(Some(graph_name)));
+        let new_compiler = Box::new(FuncCompiler::new(Some(graph_name)));
         let old_compiler = mem::replace(&mut self.compiler, new_compiler);
         self.compiler.enclosing = Some(old_compiler);
     }
 
-    fn pop_graph_compiler(&mut self) -> GraphCompiler {
+    fn pop_graph_compiler(&mut self) -> FuncCompiler {
         #[cfg(feature = "debug_print_code")]
         {
             if !self.had_error {
                 let name = self
                     .compiler
-                    .graph
+                    .function
                     .name
                     .map(|ls| ls.as_str().to_string())
                     .unwrap_or_else(|| "<script>".to_string());
 
-                crate::disassembler::disassemble(&self.compiler.graph.chunk, &name);
+                crate::disassembler::disassemble(&self.compiler.function.chunk, &name);
             }
         }
 
@@ -210,7 +208,7 @@ impl<'source> Compiler<'source> {
             *compiler
         } else {
             // TODO no need to put a random object into self.compiler
-            let compiler = mem::replace(&mut self.compiler, Box::new(GraphCompiler::new(None)));
+            let compiler = mem::replace(&mut self.compiler, Box::new(FuncCompiler::new(None)));
             *compiler
         }
     }
@@ -222,11 +220,7 @@ impl<'source> Compiler<'source> {
     fn end_scope(&mut self) {
         // Discard locally declared variables
         while self.compiler.has_local_in_scope() {
-            if self.compiler.get_local().is_captured {
-                self.emit(OpCode::CloseUpvalue);
-            } else {
-                self.emit(OpCode::Pop);
-            }
+            self.emit(OpCode::Pop);
             self.compiler.remove_local();
         }
         self.compiler.end_scope();
@@ -289,10 +283,6 @@ impl<'source> Compiler<'source> {
             }
         };
         self.emit(OpCode::Loop(offset));
-    }
-
-    fn error_at_current(&mut self, message: &str) {
-        self.error_at(message)
     }
 
     fn error_str(&mut self, message: &str) {

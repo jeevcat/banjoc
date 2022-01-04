@@ -6,18 +6,14 @@ use std::{
 use crate::{
     chunk::Chunk,
     gc::{GcRef, ObjHeader},
-    table::Table,
     value::Value,
-    vm::ValueStack,
 };
 
 #[derive(Clone, Copy)]
 pub enum ObjectType {
     String,
-    Graph,
     NativeFunction,
-    Closure,
-    Upvalue,
+    Function,
 }
 
 pub struct LoxString {
@@ -57,32 +53,25 @@ pub fn hash_string(string: &str) -> u32 {
     hash
 }
 
-pub struct FunctionUpvalue {
-    pub index: u8,
-    pub is_local: bool,
-}
-
-pub struct Graph {
+pub struct Function {
     pub header: ObjHeader,
     pub arity: usize,
     pub chunk: Chunk,
     pub name: Option<GcRef<LoxString>>,
-    pub upvalues: Vec<FunctionUpvalue>,
 }
 
-impl Graph {
+impl Function {
     pub fn new(name: Option<GcRef<LoxString>>) -> Self {
         Self {
-            header: ObjHeader::new(ObjectType::Graph),
+            header: ObjHeader::new(ObjectType::Function),
             arity: 0,
             chunk: Chunk::new(),
             name,
-            upvalues: vec![],
         }
     }
 }
 
-impl Display for Graph {
+impl Display for Function {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         if let Some(name) = self.name {
             f.write_str("<fn ")?;
@@ -114,70 +103,5 @@ impl Display for NativeFunction {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.write_str("<native fn>")?;
         Ok(())
-    }
-}
-
-pub struct Closure {
-    pub header: ObjHeader,
-    pub function: GcRef<Graph>,
-    pub upvalues: Vec<GcRef<Upvalue>>,
-}
-
-impl Closure {
-    pub fn new(function: GcRef<Graph>) -> Self {
-        let upvalues = Vec::with_capacity(function.upvalues.len());
-        Self {
-            header: ObjHeader::new(ObjectType::Closure),
-            upvalues,
-            function,
-        }
-    }
-}
-
-impl Display for Closure {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        Display::fmt(self.function.deref(), f)
-    }
-}
-
-pub struct Upvalue {
-    pub header: ObjHeader,
-    /// Index of the closed-over variable in the locals stack
-    pub location: usize,
-    pub closed: Option<Value>,
-    pub next: Option<GcRef<Upvalue>>,
-}
-
-impl Upvalue {
-    pub fn new(location: usize, next: Option<GcRef<Upvalue>>) -> Self {
-        Self {
-            header: ObjHeader::new(ObjectType::Upvalue),
-            location,
-            closed: None,
-            next,
-        }
-    }
-
-    pub fn read(&self, stack: &ValueStack) -> Value {
-        if let Some(closed) = self.closed {
-            closed
-        } else {
-            *stack.read(self.location)
-        }
-    }
-
-    pub fn write(&mut self, stack: &mut ValueStack) {
-        let value = *stack.peek(0);
-        if self.closed.is_some() {
-            self.closed = Some(value);
-        } else {
-            stack.write(self.location, value);
-        }
-    }
-}
-
-impl Display for Upvalue {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.write_str("upvalue")
     }
 }

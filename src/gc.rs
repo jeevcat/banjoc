@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    obj::{hash_string, Closure, Graph, LoxString, NativeFunction, ObjectType, Upvalue},
+    obj::{hash_string, Function, LoxString, NativeFunction, ObjectType},
     table::Table,
     value::Value,
 };
@@ -16,10 +16,8 @@ impl HeaderPtr {
     fn size_of_val(&self) -> usize {
         match self.obj_type {
             ObjectType::String => mem::size_of::<LoxString>(),
-            ObjectType::Graph => mem::size_of::<Graph>(),
             ObjectType::NativeFunction => mem::size_of::<NativeFunction>(),
-            ObjectType::Closure => mem::size_of::<Closure>(),
-            ObjectType::Upvalue => mem::size_of::<Upvalue>(),
+            ObjectType::Function => mem::size_of::<Function>(),
         }
     }
 
@@ -31,10 +29,8 @@ impl HeaderPtr {
         // Must transmute to drop the full object, not just the header
         match self.obj_type {
             ObjectType::String => self.transmute::<LoxString>().drop_ptr(),
-            ObjectType::Graph => self.transmute::<Graph>().drop_ptr(),
             ObjectType::NativeFunction => self.transmute::<NativeFunction>().drop_ptr(),
-            ObjectType::Closure => self.transmute::<Closure>().drop_ptr(),
-            ObjectType::Upvalue => self.transmute::<Upvalue>().drop_ptr(),
+            ObjectType::Function => self.transmute::<Function>().drop_ptr(),
         }
     }
 }
@@ -65,10 +61,8 @@ impl Display for HeaderPtr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.obj_type {
             ObjectType::String => self.transmute::<LoxString>().fmt(f),
-            ObjectType::Graph => self.transmute::<Graph>().fmt(f),
             ObjectType::NativeFunction => self.transmute::<NativeFunction>().fmt(f),
-            ObjectType::Closure => self.transmute::<Closure>().fmt(f),
-            ObjectType::Upvalue => self.transmute::<Upvalue>().fmt(f),
+            ObjectType::Function => self.transmute::<Function>().fmt(f),
         }
     }
 }
@@ -295,27 +289,13 @@ impl Gc {
             ObjectType::NativeFunction => {
                 // No outgoing references
             }
-            ObjectType::Upvalue => {
-                let upvalue = obj.transmute::<Upvalue>();
-                // Only closed over values which are no longer on the stack need to be garbage collected
-                if let Some(mut closed) = upvalue.closed {
-                    closed.mark_gray(self);
-                }
-            }
-            ObjectType::Graph => {
-                let mut function = obj.transmute::<Graph>();
+            ObjectType::Function => {
+                let mut function = obj.transmute::<Function>();
                 if let Some(mut name) = function.name {
                     name.mark_gray(self);
                 }
                 for constant in &mut function.chunk.constants {
                     constant.mark_gray(self);
-                }
-            }
-            ObjectType::Closure => {
-                let mut closure = obj.transmute::<Closure>();
-                closure.function.mark_gray(self);
-                for i in 0..closure.upvalues.len() {
-                    closure.upvalues[i].mark_gray(self);
                 }
             }
         }
@@ -392,8 +372,8 @@ mod tests {
         let mut ls = LoxString::new("func".to_string());
         let pointer = unsafe { NonNull::new_unchecked(&mut ls) };
         let gcref = GcRef { pointer };
-        let ls = Graph::new(Some(gcref));
-        assert!(matches!(ls.header.obj_type, ObjectType::Graph));
+        let ls = Function::new(Some(gcref));
+        assert!(matches!(ls.header.obj_type, ObjectType::Function));
     }
 
     #[test]

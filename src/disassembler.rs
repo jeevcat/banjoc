@@ -54,10 +54,6 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> usize {
         OpCode::Jump(jump) => jump_instruction("OP_JUMP", 1, offset, jump),
         OpCode::Loop(jump) => jump_instruction("OP_LOOP", -1, offset, jump),
         OpCode::Call { arg_count } => byte_instruction("OP_CALL", offset, arg_count),
-        OpCode::Closure(constant) => constant_instruction("OP_CLOSURE", chunk, offset, constant),
-        OpCode::GetUpvalue(slot) => byte_instruction("OP_GET_UPVALUE", offset, slot),
-        OpCode::SetUpvalue(slot) => byte_instruction("OP_SET_UPVALUE", offset, slot),
-        OpCode::CloseUpvalue => simple_instruction("OP_CLOSE_UPVALUE", offset),
     }
 }
 

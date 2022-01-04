@@ -165,7 +165,7 @@ impl<'source> Scanner<'source> {
             },
             b'f' if self.current - self.start > 1 => match self.source.as_bytes()[self.start + 1] {
                 b'a' => self.check_keyword(2, "lse", TokenType::False),
-                b'n' => self.check_keyword(2, "n", TokenType::Fn),
+                b'n' => TokenType::Fn,
                 _ => TokenType::Identifier,
             },
             _ => TokenType::Identifier,
