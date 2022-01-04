@@ -77,9 +77,14 @@ impl<'source> Compiler<'source> {
                 self.var_declaration(ast, body_node, node.get_name())?
             }
             NodeType::Param => {
-                self.compiler.increment_arity()?;
-                self.declare_local_variable(node.get_name())?;
-                self.compiler.mark_var_initialized();
+                let name = node.get_name();
+                // Only declare the param once, but allow same param to be input many times
+                if !self.compiler.is_local_already_in_scope(name) {
+                    self.compiler.increment_arity()?;
+                    self.declare_local_variable(name)?;
+                    self.compiler.mark_var_initialized();
+                }
+                self.named_variable(name)?;
             }
             NodeType::VariableReference => self.named_variable(node.get_name())?,
             NodeType::FunctionCall { arguments } => self.call(ast, arguments)?,
@@ -112,8 +117,8 @@ impl<'source> Compiler<'source> {
                         for term in terms.iter().skip(1) {
                             let term = ast.get_node(term).unwrap();
                             self.node(ast, term)?;
+                            self.emit_binary(node.node_id.token_type)
                         }
-                        self.emit_binary(node.node_id.token_type)
                     }
                 }
             }

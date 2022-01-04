@@ -4,7 +4,12 @@ digraph A {
     param1 [type=param]
     param2 [type=param]
     param1 -> sum
+    param1 -> sum
+    param1 -> sum
+    param1 -> sum
     param2 -> sum
+    param2 -> sum
+    3 -> sum
     sum -> fn_a
     2 -> ref_a
     1 -> ref_a -> return
