@@ -226,7 +226,8 @@ impl<'source> Compiler<'source> {
 
         self.node(ast, body_node)?;
 
-        // Because we end the compiler completely, there’s no need to close the lingering outermost scope with end_scope().
+        // Because we end the compiler completely, there’s no need to close the
+        // lingering outermost scope with end_scope().
         let FuncCompiler { function, .. } = self.pop_func_compiler();
         let value = Value::Function(self.gc.alloc(function));
 
@@ -263,7 +264,8 @@ impl<'source> Compiler<'source> {
     /// Declare existance of local or global variable, not yet assigning a value
     fn declare_variable(&mut self, name: Token<'source>) -> Option<Constant> {
         // At runtime, locals aren’t looked up by name.
-        // There’s no need to stuff the variable’s name into the constant table, so if the declaration is inside a local scope, we return None instead.
+        // There’s no need to stuff the variable’s name into the constant table, so if
+        // the declaration is inside a local scope, we return None instead.
         if self.compiler.is_local_scope() {
             self.declare_local_variable(name).ok()?;
             None
@@ -288,7 +290,8 @@ impl<'source> Compiler<'source> {
         if let Some(global) = global {
             self.emit(OpCode::DefineGlobal(global))
         } else {
-            // For local variables, we just save references to values on the stack. No need to store them somewhere else like globals do.
+            // For local variables, we just save references to values on the stack. No need
+            // to store them somewhere else like globals do.
             debug_assert!(self.compiler.is_local_scope());
             self.compiler.mark_var_initialized();
         }
@@ -364,7 +367,8 @@ impl<'source> Compiler<'source> {
     fn make_constant(&mut self, value: Value) -> Result<Constant> {
         let constant = self.current_chunk().add_constant(value);
         if constant > u8::MAX.into() {
-            // TODO we'd want to add another instruction like OpCode::Constant16 which stores the index as a two-byte operand when this limit is hit
+            // TODO we'd want to add another instruction like OpCode::Constant16 which
+            // stores the index as a two-byte operand when this limit is hit
             return Err(LoxError::CompileError("Too many constants in one chunk."));
         }
         Ok(Constant {

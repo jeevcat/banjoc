@@ -186,7 +186,7 @@ impl<'source> NodeType<'source> {
             | TokenType::Nil
             | TokenType::True
             | TokenType::False => Some(NodeType::Literal),
-            TokenType::Identifier => Self::from_name(attributes?.label?, None), // try again with label
+            TokenType::Identifier => Self::from_name(attributes?.label?, None), /* try again with label */
             TokenType::Return => Some(NodeType::Return { argument: None }),
             _ => None,
         }

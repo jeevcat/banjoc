@@ -9,12 +9,11 @@ use crate::{
     error::{LoxError, Result},
     gc::{GarbageCollect, Gc, GcRef},
     obj::{Function, LoxString, NativeFn, NativeFunction},
-    op_code::{Constant, LocalIndex},
+    op_code::{Constant, LocalIndex, OpCode},
     stack::Stack,
     table::Table,
+    value::Value,
 };
-
-use crate::{op_code::OpCode, value::Value};
 
 pub type ValueStack = Stack<Value, { Vm::STACK_MAX }>;
 pub struct Vm {
@@ -237,7 +236,8 @@ impl Vm {
 
     fn define_native(&mut self, name: &str, function: NativeFn) {
         let ls = self.intern(name);
-        // Pushing and popping to and from stack is only to ensure no GC occurs on call to alloc
+        // Pushing and popping to and from stack is only to ensure no GC occurs on call
+        // to alloc
         self.stack.push(Value::String(ls));
         let native = self.alloc(NativeFunction::new(function));
         self.globals.insert(ls, Value::NativeFunction(native));
@@ -249,7 +249,8 @@ impl Vm {
         self.gc.intern(string)
     }
 
-    /// Move the provided object to the heap and track with the garbage collector
+    /// Move the provided object to the heap and track with the garbage
+    /// collector
     pub fn alloc<T>(&mut self, object: T) -> GcRef<T>
     where
         T: Display,
@@ -280,7 +281,8 @@ impl Vm {
 /// Represents a single ongoing function call
 struct CallFrame {
     function: GcRef<Function>,
-    /// The instruction pointer of this function. Returning from this function will resume from here.
+    /// The instruction pointer of this function. Returning from this function
+    /// will resume from here.
     ip: *const OpCode,
     /// The first slot in the VM's value stack that this function can use
     slot: usize,

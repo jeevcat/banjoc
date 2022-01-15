@@ -7,7 +7,8 @@ use crate::{
 };
 
 struct Entry {
-    // The table doesn't own any of the strings used as keys. Their lifetime is the responsibility of the gc
+    // The table doesn't own any of the strings used as keys.
+    // Their lifetime is the responsibility of the gc
     key: Option<GcRef<LoxString>>,
     value: Value,
 }

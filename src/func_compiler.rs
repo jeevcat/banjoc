@@ -11,7 +11,8 @@ pub struct FuncCompiler<'source> {
     // TODO can this be improved without using the heap?
     pub enclosing: Option<Box<FuncCompiler<'source>>>,
     pub function: Function,
-    /// Keeps track of which stack slots are associated with which local variables or temporaries
+    /// Keeps track of which stack slots are associated with which local
+    /// variables or temporaries
     locals: Vec<Local<'source>>,
     /// The number of blocks surrounding the current bit of code
     scope_depth: u32,

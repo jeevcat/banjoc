@@ -5,7 +5,7 @@ use crate::{
 
 #[cfg(feature = "debug_print_code")]
 pub fn disassemble(chunk: &Chunk, name: &str) {
-    println!("== {} ==", name);
+    println!("== {name} ==");
     let mut offset = 0;
     while offset < chunk.code.len() {
         offset = disassemble_instruction(chunk, offset);
@@ -19,7 +19,7 @@ pub fn disassemble_instruction_ptr(chunk: &Chunk, ip: *const OpCode) -> usize {
 }
 
 pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> usize {
-    print!("{:04} ", offset);
+    print!("{offset:04} ");
 
     let instruction = chunk.code[offset];
     match instruction {
@@ -51,7 +51,7 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> usize {
 }
 
 fn simple_instruction(name: &str, offset: usize) -> usize {
-    println!("{}", name);
+    println!("{name}");
     offset + 1
 }
 
@@ -64,6 +64,6 @@ fn constant_instruction(name: &str, chunk: &Chunk, offset: usize, constant: Cons
 }
 
 fn byte_instruction(name: &str, offset: usize, slot: u8) -> usize {
-    println!("{:-16} {:4}", name, slot);
+    println!("{name:-16} {slot:4}");
     offset + 1
 }

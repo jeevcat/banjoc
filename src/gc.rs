@@ -204,7 +204,8 @@ impl Gc {
         }
     }
 
-    /// Move the provided object to the heap and track with the garbage collector
+    /// Move the provided object to the heap and track with the garbage
+    /// collector
     pub fn alloc<T>(&mut self, object: T) -> GcRef<T>
     where
         T: Display,
@@ -216,7 +217,8 @@ impl Gc {
         let pointer = unsafe {
             GcRef {
                 pointer: NonNull::new_unchecked(
-                    // into_raw here prevents the object from be dropped at the end of this scope. Now we are responsible!
+                    // into_raw here prevents the object from be dropped at the end of this scope.
+                    // Now we are responsible!
                     Box::into_raw(boxed),
                 ),
             }
