@@ -87,6 +87,15 @@ where
     }
 }
 
+impl<T, const N: usize> Default for Stack<T, N>
+where
+    T: Default,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T, const N: usize> Debug for Stack<T, N>
 where
     T: Default + Display,

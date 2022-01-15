@@ -345,6 +345,12 @@ impl Gc {
     }
 }
 
+impl Default for Gc {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

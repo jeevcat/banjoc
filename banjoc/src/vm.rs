@@ -278,6 +278,12 @@ impl Vm {
     }
 }
 
+impl Default for Vm {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Represents a single ongoing function call
 struct CallFrame {
     function: GcRef<Function>,
