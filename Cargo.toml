@@ -1,5 +1,8 @@
 [workspace]
-members = ["banjoc", "cli"]
+members = ["banjoc", "cli", "wasm"]
 
 [profile.release]
-debug = true
+#debug = true
+
+# Tell `rustc` to optimize for small code size.
+opt-level = "s"
