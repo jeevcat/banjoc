@@ -1,0 +1,11 @@
+[package]
+name = "cli"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "banjo"
+path = "src/main.rs"
+
+[dependencies]
+banjoc = {path = "../banjoc"}

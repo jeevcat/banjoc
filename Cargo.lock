@@ -3,5 +3,12 @@
 version = 3
 
 [[package]]
-name = "banjo"
+name = "banjoc"
 version = "0.1.0"
+
+[[package]]
+name = "cli"
+version = "0.1.0"
+dependencies = [
+ "banjoc",
+]

@@ -4,24 +4,7 @@ use std::{
     process,
 };
 
-use error::LoxError;
-use vm::Vm;
-
-mod chunk;
-mod compiler;
-#[cfg(any(feature = "debug_trace_execution", feature = "debug_print_code"))]
-mod disassembler;
-mod error;
-mod func_compiler;
-mod gc;
-mod obj;
-mod op_code;
-mod parser;
-mod scanner;
-mod stack;
-mod table;
-mod value;
-mod vm;
+use banjoc::{error::LoxError, vm::Vm};
 
 fn repl(vm: &mut Vm) {
     loop {
