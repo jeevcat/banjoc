@@ -10,7 +10,7 @@ mod parser;
 mod scanner;
 mod stack;
 mod table;
-mod value;
 
 pub mod error;
+pub mod value;
 pub mod vm;
