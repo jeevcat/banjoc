@@ -276,7 +276,6 @@ struct Tokens<'source> {
     current: Token<'source>,
     previous: Token<'source>,
     had_error: bool,
-    panic_mode: bool,
 }
 
 impl<'source> Tokens<'source> {
@@ -286,7 +285,6 @@ impl<'source> Tokens<'source> {
             current: Token::none(),
             previous: Token::none(),
             had_error: false,
-            panic_mode: false,
         }
     }
 
@@ -339,10 +337,6 @@ impl<'source> Tokens<'source> {
     }
 
     fn error_at(&mut self, token: Token, message: &str) {
-        if self.panic_mode {
-            return;
-        }
-        self.panic_mode = true;
         eprint!("[line {}] Error", token.line);
 
         match token.token_type {

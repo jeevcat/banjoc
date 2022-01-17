@@ -34,7 +34,14 @@ fn run_file(vm: &mut Vm, path: &str) {
     match vm.interpret(&code) {
         Ok(result) => println!("{}", result),
         Err(error) => match error {
-            LoxError::CompileError(_) => {
+            LoxError::CompileError(e) => {
+                eprint!("{e}");
+                process::exit(65);
+            }
+            LoxError::CompileErrors(errors) => {
+                for e in errors {
+                    eprintln!("{e}");
+                }
                 process::exit(65);
             }
             LoxError::RuntimeError => {

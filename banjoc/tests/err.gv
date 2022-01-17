@@ -1,0 +1,4 @@
+digraph {
+   -> sum
+  2 -> sum -> return
+}

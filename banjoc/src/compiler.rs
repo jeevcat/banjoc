@@ -2,7 +2,7 @@ use std::mem::{self};
 
 use crate::{
     chunk::Chunk,
-    error::{LoxError, Result},
+    error::{append, LoxError, Result},
     func_compiler::FuncCompiler,
     gc::{Gc, GcRef},
     obj::Function,
@@ -17,23 +17,17 @@ pub fn compile(source: &str, vm: &mut Gc) -> Result<GcRef<Function>> {
     let ast = parser.parse()?;
     let mut compiler = Compiler::new(vm);
 
-    compiler.compile(&ast);
+    compiler.compile(&ast)?;
 
     let function = compiler.pop_func_compiler().function;
 
-    if compiler.had_error {
-        Err(LoxError::CompileError("Parser error."))
-    } else {
-        Ok(vm.alloc(function))
-    }
+    Ok(vm.alloc(function))
 }
 
 struct Compiler<'source> {
     // TODO: this should be an option
     compiler: Box<FuncCompiler<'source>>,
     gc: &'source mut Gc,
-    had_error: bool,
-    panic_mode: bool,
 }
 
 impl<'source> Compiler<'source> {
@@ -41,27 +35,25 @@ impl<'source> Compiler<'source> {
         Self {
             compiler: Box::new(FuncCompiler::new(None)),
             gc,
-            had_error: false,
-            panic_mode: false,
         }
     }
 
-    fn compile(&mut self, ast: &'source Ast<'source>) {
+    fn compile(&mut self, ast: &'source Ast<'source>) -> Result<()> {
+        let mut result = Ok(());
         self.begin_scope();
         for node in ast.get_definitions() {
-            self.compile_node(ast, node);
+            if let Err(e) = self.node(ast, node) {
+                append(&mut result, e);
+            }
         }
 
         let return_node = ast.get_return_node();
-        self.compile_node(ast, return_node);
-        self.end_scope();
-    }
-
-    fn compile_node(&mut self, ast: &'source Ast<'source>, node: &'source Node<'source>) {
-        // If a node fails to compile, surface the error but continue compilation
-        if let Err(error) = self.node(ast, node) {
-            self.error(error);
+        if let Err(e) = self.node(ast, return_node) {
+            append(&mut result, e);
         }
+        self.end_scope();
+
+        result
     }
 
     fn node(&mut self, ast: &'source Ast<'source>, node: &'source Node<'source>) -> Result<()> {
@@ -73,7 +65,9 @@ impl<'source> Compiler<'source> {
                 self.fun_declaration(ast, body_node, node.get_name())?
             }
             NodeType::VariableDefinition { body } => {
-                let body_node = ast.get_node(body.unwrap()).unwrap();
+                let body =
+                    body.ok_or(LoxError::CompileError("Variable definition has no input."))?;
+                let body_node = ast.get_node(body).unwrap();
                 self.var_declaration(ast, body_node, node.get_name())?
             }
             NodeType::Param => {
@@ -315,16 +309,14 @@ impl<'source> Compiler<'source> {
 
         #[cfg(feature = "debug_print_code")]
         {
-            if !self.had_error {
-                let name = self
-                    .compiler
-                    .function
-                    .name
-                    .map(|ls| ls.as_str().to_string())
-                    .unwrap_or_else(|| "<script>".to_string());
+            let name = self
+                .compiler
+                .function
+                .name
+                .map(|ls| ls.as_str().to_string())
+                .unwrap_or_else(|| "<script>".to_string());
 
-                crate::disassembler::disassemble(&self.compiler.function.chunk, &name);
-            }
+            crate::disassembler::disassemble(&self.compiler.function.chunk, &name);
         }
 
         if let Some(enclosing) = self.compiler.enclosing.take() {
@@ -374,20 +366,5 @@ impl<'source> Compiler<'source> {
         Ok(Constant {
             slot: constant.try_into().unwrap(),
         })
-    }
-
-    fn error(&mut self, error: LoxError) {
-        if let LoxError::CompileError(message) = error {
-            self.error_at(message)
-        }
-    }
-
-    fn error_at(&mut self, message: &str) {
-        if self.panic_mode {
-            return;
-        }
-        self.panic_mode = true;
-        eprint!("Error: {}", message);
-        self.had_error = true;
     }
 }

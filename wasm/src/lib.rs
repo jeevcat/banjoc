@@ -1,6 +1,7 @@
 mod utils;
 
 use banjoc::{error::LoxError, value::Value, vm::Vm};
+use utils::set_panic_hook;
 use wasm_bindgen::prelude::*;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
@@ -11,10 +12,14 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 #[wasm_bindgen(catch)]
 pub fn interpret(source: &str) -> Result<JsValue, JsValue> {
+    set_panic_hook();
     let mut vm = Vm::new();
     vm.interpret(source)
         .map_err(|e| match e {
             LoxError::CompileError(msg) => JsValue::from_str(&format!("compile error: {msg}")),
+            LoxError::CompileErrors(msg) => {
+                JsValue::from_str(&format!("compiler errors:\n{}", msg.join("\n")))
+            }
             LoxError::RuntimeError => JsValue::from_str("runtime error"),
         })
         .map(|v| match v {
