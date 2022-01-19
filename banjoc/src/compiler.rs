@@ -47,7 +47,9 @@ impl<'source> Compiler<'source> {
             }
         }
 
-        let return_node = ast.get_return_node();
+        let return_node = ast
+            .get_return_node()
+            .ok_or(LoxError::CompileError("No return node."))?;
         if let Err(e) = self.node(ast, return_node) {
             append(&mut result, e);
         }

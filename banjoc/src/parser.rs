@@ -22,8 +22,8 @@ impl<'source> Ast<'source> {
         self.all_nodes.get(node_id)
     }
 
-    pub fn get_return_node(&self) -> &Node {
-        self.get_node(self.return_node.unwrap()).unwrap()
+    pub fn get_return_node(&self) -> Option<&Node> {
+        self.get_node(self.return_node?)
     }
 
     pub fn get_definitions(&self) -> impl Iterator<Item = &Node> {
@@ -482,7 +482,7 @@ mod tests {
         let source = "digraph { 10 -> b -> return }";
         let parser = Parser::new(source);
         let graph = parser.parse().unwrap();
-        let return_node = graph.get_return_node();
+        let return_node = graph.get_return_node().unwrap();
         match return_node.node_type {
             NodeType::Return {
                 argument: Some(argument),
