@@ -92,21 +92,8 @@ impl Vm {
                 OpCode::Add => {
                     let b = *self.stack.peek(0);
                     let a = *self.stack.peek(1);
-                    match (a, b) {
-                        (Value::Number(a), Value::Number(b)) => {
-                            self.stack.pop();
-                            self.stack.pop();
-                            let result = Value::Number(a + b);
-                            self.stack.push(result);
-                        }
-                        (Value::String(a), Value::String(b)) => {
-                            self.stack.pop();
-                            self.stack.pop();
-                            let result = self.intern(&format!("{}{}", a.as_str(), b.as_str()));
-                            self.stack.push(Value::String(result));
-                        }
-                        _ => self.runtime_error("Operands must be two numbers or two strings.")?,
-                    }
+                    let result = a.add(b, self)?;
+                    self.stack.push(result);
                 }
                 OpCode::Constant(constant) => {
                     let constant = self.current_frame().read_constant(constant);
