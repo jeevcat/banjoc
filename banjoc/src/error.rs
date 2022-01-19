@@ -3,7 +3,7 @@ pub type Result<T> = std::result::Result<T, LoxError>;
 pub enum LoxError {
     CompileError(&'static str),
     CompileErrors(Vec<&'static str>),
-    RuntimeError,
+    RuntimeError(String),
 }
 
 impl LoxError {

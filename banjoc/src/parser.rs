@@ -106,9 +106,6 @@ pub enum NodeType<'source> {
         term_a: Option<NodeId<'source>>,
         term_b: Option<NodeId<'source>>,
     },
-    Variadic {
-        terms: Vec<NodeId<'source>>,
-    },
 }
 
 impl<'source> NodeType<'source> {
@@ -120,9 +117,6 @@ impl<'source> NodeType<'source> {
             term_a: None,
             term_b: None,
         }
-    }
-    fn variadic() -> Self {
-        NodeType::Variadic { terms: vec![] }
     }
 }
 
@@ -142,9 +136,7 @@ impl<'source> NodeType<'source> {
         Some(match attributes?.node_type?.token_type {
             TokenType::Not => NodeType::unary(),
             TokenType::Negate => NodeType::unary(),
-            TokenType::Sum => NodeType::variadic(),
             TokenType::Subtract => NodeType::binary(),
-            TokenType::Product => NodeType::variadic(),
             TokenType::Divide => NodeType::binary(),
             TokenType::Equals => NodeType::binary(),
             TokenType::Greater => NodeType::binary(),
@@ -172,9 +164,7 @@ impl<'source> NodeType<'source> {
         match token.token_type {
             TokenType::Not => Some(NodeType::unary()),
             TokenType::Negate => Some(NodeType::unary()),
-            TokenType::Sum => Some(NodeType::variadic()),
             TokenType::Subtract => Some(NodeType::binary()),
-            TokenType::Product => Some(NodeType::variadic()),
             TokenType::Divide => Some(NodeType::binary()),
             TokenType::Equals => Some(NodeType::binary()),
             TokenType::Greater => Some(NodeType::binary()),
@@ -225,7 +215,6 @@ impl<'source> NodeType<'source> {
                 },
                 None => *term_a = Some(input),
             },
-            NodeType::Variadic { terms } => terms.push(input),
         };
         Ok(())
     }
@@ -637,7 +626,6 @@ mod tests {
                 f [type=param]
                 g [type=not]
                 h [type=subtract]
-                i [type=sum]
                 j [type=gt]
                 k [type=gte]
                 l [type=lt]
@@ -677,10 +665,6 @@ mod tests {
         assert!(matches!(
             graph.get_node("h").unwrap().node_type,
             NodeType::Binary { .. }
-        ));
-        assert!(matches!(
-            graph.get_node("i").unwrap().node_type,
-            NodeType::Variadic { .. }
         ));
         assert!(matches!(
             graph.get_node("j").unwrap().node_type,

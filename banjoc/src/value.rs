@@ -5,8 +5,10 @@ use std::{
 };
 
 use crate::{
+    error::{LoxError, Result},
     gc::{GarbageCollect, Gc, GcRef},
     obj::{Function, LoxString, NativeFunction},
+    vm::Vm,
 };
 
 #[derive(Clone, Copy)]
@@ -26,6 +28,29 @@ impl Value {
             Value::Bool(b) => !b,
             Value::Nil => true,
             _ => false,
+        }
+    }
+
+    pub fn add(self, rhs: Self, vm: &mut Vm) -> Result<Self> {
+        match (self, rhs) {
+            (Value::Number(a), Value::Number(b)) => Ok(Value::Number(a + b)),
+            (Value::String(a), Value::String(b)) => Ok(Value::String(vm.intern(&format!(
+                "{}{}",
+                a.as_str(),
+                b.as_str()
+            )))),
+            _ => Err(LoxError::RuntimeError(
+                "Operands must be two numbers or two strings.".to_string(),
+            )),
+        }
+    }
+
+    pub fn binary_op(self, rhs: Self, f: impl Fn(f64, f64) -> Value) -> Result<Self> {
+        match (self, rhs) {
+            (Value::Number(a), Value::Number(b)) => Ok(f(a, b)),
+            _ => Err(LoxError::RuntimeError(
+                "Operands must be numbers.".to_string(),
+            )),
         }
     }
 }

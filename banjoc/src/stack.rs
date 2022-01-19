@@ -40,7 +40,7 @@ where
         }
     }
 
-    pub fn pop_n(&mut self, num: usize) -> &[T] {
+    pub fn pop_n<'a>(&mut self, num: usize) -> &'a [T] {
         debug_assert!(self.index >= num);
         unsafe {
             self.index -= num;

@@ -83,7 +83,10 @@ impl<'source> Compiler<'source> {
                 self.named_variable(name)?;
             }
             NodeType::VariableReference => self.named_variable(node.get_name())?,
-            NodeType::FunctionCall { arguments } => self.call(ast, arguments)?,
+            NodeType::FunctionCall { arguments } => {
+                self.named_variable(node.get_name())?;
+                self.call(ast, arguments)?;
+            }
             NodeType::Return { argument } => {
                 let argument = ast.get_node(argument.unwrap()).unwrap();
                 self.node(ast, argument)?;
@@ -100,23 +103,6 @@ impl<'source> Compiler<'source> {
                     self.node(ast, term)?;
                 }
                 self.emit_binary(node.node_id.token_type)
-            }
-            NodeType::Variadic { terms } => {
-                if terms.is_empty() {
-                    self.emit(OpCode::Nil);
-                } else {
-                    // For single term, don't apply an operator, just evaluate
-                    let first_term = ast.get_node(terms[0]).unwrap();
-                    self.node(ast, first_term)?;
-
-                    if terms.len() > 1 {
-                        for term in terms.iter().skip(1) {
-                            let term = ast.get_node(term).unwrap();
-                            self.node(ast, term)?;
-                            self.emit_binary(node.node_id.token_type)
-                        }
-                    }
-                }
             }
         }
         Ok(())
@@ -139,8 +125,6 @@ impl<'source> Compiler<'source> {
             TokenType::Equals => self.emit(OpCode::Equal),
             TokenType::Greater => self.emit(OpCode::Greater),
             TokenType::Less => self.emit(OpCode::Less),
-            TokenType::Sum => self.emit(OpCode::Add),
-            TokenType::Product => self.emit(OpCode::Multiply),
             TokenType::NotEquals => {
                 self.emit(OpCode::Equal);
                 self.emit(OpCode::Not);

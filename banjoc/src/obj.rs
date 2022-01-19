@@ -2,8 +2,10 @@ use std::fmt::{self, Display, Formatter, Write};
 
 use crate::{
     chunk::Chunk,
+    error::Result,
     gc::{GcRef, ObjHeader},
     value::Value,
+    vm::Vm,
 };
 
 #[derive(Clone, Copy)]
@@ -81,7 +83,7 @@ impl Display for Function {
     }
 }
 
-pub type NativeFn = fn(args: &[Value]) -> Value;
+pub type NativeFn = fn(args: &[Value], vm: &mut Vm) -> Result<Value>;
 pub struct NativeFunction {
     pub header: ObjHeader,
     pub function: NativeFn,

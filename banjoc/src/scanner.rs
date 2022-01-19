@@ -144,6 +144,8 @@ impl<'source> Scanner<'source> {
             b'c' => self.check_keyword(1, "all", TokenType::Call),
             b'i' => self.check_keyword(1, "f", TokenType::If),
             b'o' => self.check_keyword(1, "r", TokenType::Or),
+            b'p' => self.check_keyword(1, "aram", TokenType::Param),
+            b's' => self.check_keyword(1, "ubtract", TokenType::Subtract),
             b't' => self.check_keyword(1, "rue", TokenType::True),
             b'v' => self.check_keyword(1, "ar", TokenType::Var),
             b'e' if self.len() > 1 => match self.char_n(1) {
@@ -156,19 +158,9 @@ impl<'source> Scanner<'source> {
                 b'a' => self.check_keyword(2, "lse", TokenType::False),
                 _ => TokenType::Identifier,
             },
-            b'p' if self.len() > 1 => match self.char_n(1) {
-                b'a' => self.check_keyword(2, "ram", TokenType::Param),
-                b'r' => self.check_keyword(2, "oduct", TokenType::Product),
-                _ => TokenType::Identifier,
-            },
             b'd' if self.char_n(1) == b'i' && self.len() > 2 => match self.char_n(2) {
                 b'g' => self.check_keyword(3, "raph", TokenType::Digraph),
                 b'v' => self.check_keyword(3, "ide", TokenType::Divide),
-                _ => TokenType::Identifier,
-            },
-            b's' if self.char_n(1) == b'u' && self.len() > 2 => match self.char_n(2) {
-                b'b' => self.check_keyword(3, "tract", TokenType::Subtract),
-                b'm' => self.check_keyword(3, "", TokenType::Sum),
                 _ => TokenType::Identifier,
             },
             b'n' if self.len() > 1 => match self.char_n(1) {
@@ -279,10 +271,6 @@ pub enum TokenType {
     GreaterEqual, // gte
     Less,         // lt
     LessEqual,    // lte
-
-    // Variadic
-    Sum,
-    Product,
 
     // One or two character tokens.
     LeftBrace,

@@ -20,7 +20,7 @@ pub fn interpret(source: &str) -> Result<JsValue, JsValue> {
             LoxError::CompileErrors(msg) => {
                 JsValue::from_str(&format!("compiler errors:\n{}", msg.join("\n")))
             }
-            LoxError::RuntimeError => JsValue::from_str("runtime error"),
+            LoxError::RuntimeError(msg) => JsValue::from_str(&format!("runtime error: {msg}")),
         })
         .map(|v| match v {
             Value::Bool(b) => match b {

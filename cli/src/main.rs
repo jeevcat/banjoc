@@ -44,8 +44,8 @@ fn run_file(vm: &mut Vm, path: &str) {
                 }
                 process::exit(65);
             }
-            LoxError::RuntimeError => {
-                eprintln!("Runtime error.");
+            LoxError::RuntimeError(e) => {
+                eprintln!("{e}");
                 process::exit(70);
             }
         },

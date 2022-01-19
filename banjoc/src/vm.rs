@@ -37,13 +37,29 @@ impl Vm {
             globals: Table::new(),
         };
 
-        vm.define_native("clock", |_| {
-            Value::Number(
+        vm.define_native("clock", |_, _| {
+            Ok(Value::Number(
                 SystemTime::now()
                     .duration_since(UNIX_EPOCH)
                     .unwrap()
                     .as_secs_f64(),
-            )
+            ))
+        });
+        vm.define_native("sum", |args, vm| {
+            args.iter()
+                .cloned()
+                .reduce(|accum, item| accum.add(item, vm).unwrap_or(accum))
+                .ok_or_else(|| LoxError::RuntimeError("Expected at least 1 argument.".to_string()))
+        });
+        vm.define_native("product", |args, _| {
+            args.iter()
+                .cloned()
+                .reduce(|accum, item| {
+                    accum
+                        .binary_op(item, |a, b| Value::Number(a * b))
+                        .unwrap_or(accum)
+                })
+                .ok_or_else(|| LoxError::RuntimeError("Expected at least 1 argument.".to_string()))
         });
 
         vm
@@ -194,7 +210,7 @@ impl Vm {
         match callee {
             Value::NativeFunction(callee) => {
                 let args = self.stack.pop_n(arg_count);
-                let result = (callee.function)(args);
+                let result = (callee.function)(args, self)?;
                 self.stack.pop();
                 self.stack.push(result);
                 Ok(())
@@ -231,7 +247,7 @@ impl Vm {
             eprintln!("in {}", *closure);
         }
 
-        Err(LoxError::RuntimeError)
+        Err(LoxError::RuntimeError(message.to_string()))
     }
 
     fn define_native(&mut self, name: &str, function: NativeFn) {
