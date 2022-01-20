@@ -1,7 +1,10 @@
 [package]
-name = "wasm"
+name = "banjo-wasm"
 version = "0.1.0"
 edition = "2021"
+description = "Banjo compiler for wasm"
+repository = "https://github.com/jeevcat/banjo"
+license = "Apache-2.0"
 
 [lib]
 crate-type = ["cdylib", "rlib"]

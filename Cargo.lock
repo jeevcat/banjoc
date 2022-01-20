@@ -3,6 +3,17 @@
 version = 3
 
 [[package]]
+name = "banjo-wasm"
+version = "0.1.0"
+dependencies = [
+ "banjoc",
+ "console_error_panic_hook",
+ "wasm-bindgen",
+ "wasm-bindgen-test",
+ "wee_alloc",
+]
+
+[[package]]
 name = "banjoc"
 version = "0.1.0"
 
@@ -117,17 +128,6 @@ name = "unicode-xid"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ccb82d61f80a663efe1f787a51b16b5a51e3314d6ac365b08639f52387b33f3"
-
-[[package]]
-name = "wasm"
-version = "0.1.0"
-dependencies = [
- "banjoc",
- "console_error_panic_hook",
- "wasm-bindgen",
- "wasm-bindgen-test",
- "wee_alloc",
-]
 
 [[package]]
 name = "wasm-bindgen"
