@@ -59,18 +59,27 @@ impl<'source> Compiler<'source> {
     }
 
     fn node(&mut self, ast: &'source Ast<'source>, node: &'source Node<'source>) -> Result<()> {
-        // TODO unwraps below
+        fn get_node<'source>(
+            ast: &'source Ast,
+            node_id: &Option<NodeId>,
+        ) -> Option<&'source Node<'source>> {
+            ast.get_node(node_id.as_ref()?)
+        }
         match &node.node_type {
             NodeType::Literal => self.literal(node.get_name())?,
             NodeType::FunctionDefinition { body, .. } => {
-                let body_node = ast.get_node(body.unwrap()).unwrap();
-                self.fun_declaration(ast, body_node, node.get_name())?
+                if let Some(body_node) = get_node(ast, body) {
+                    self.fun_declaration(ast, body_node, node.get_name())?
+                } else {
+                    return Err(LoxError::CompileError("Function definition has no input."));
+                }
             }
             NodeType::VariableDefinition { body } => {
-                let body =
-                    body.ok_or(LoxError::CompileError("Variable definition has no input."))?;
-                let body_node = ast.get_node(body).unwrap();
-                self.var_declaration(ast, body_node, node.get_name())?
+                if let Some(body_node) = get_node(ast, body) {
+                    self.var_declaration(ast, body_node, node.get_name())?
+                } else {
+                    return Err(LoxError::CompileError("Variable definition has no input."));
+                }
             }
             NodeType::Param => {
                 let name = node.get_name();
@@ -88,19 +97,28 @@ impl<'source> Compiler<'source> {
                 self.call(ast, arguments)?;
             }
             NodeType::Return { argument } => {
-                let argument = ast.get_node(argument.unwrap()).unwrap();
-                self.node(ast, argument)?;
-                self.emit_return();
+                if let Some(argument) = get_node(ast, argument) {
+                    self.node(ast, argument)?;
+                } else {
+                    self.emit(OpCode::Nil);
+                }
+                self.emit(OpCode::Return);
             }
             NodeType::Unary { argument } => {
-                let argument = ast.get_node(argument.unwrap()).unwrap();
-                self.node(ast, argument)?;
-                self.emit_unary(node.node_id.token_type);
+                if let Some(argument) = get_node(ast, argument) {
+                    self.node(ast, argument)?;
+                    self.emit_unary(node.node_id.token_type);
+                } else {
+                    return Err(LoxError::CompileError("Unary has no input."));
+                }
             }
             NodeType::Binary { term_a, term_b } => {
                 for term in [term_a, term_b] {
-                    let term = ast.get_node(term.unwrap()).unwrap();
-                    self.node(ast, term)?;
+                    if let Some(term) = get_node(ast, term) {
+                        self.node(ast, term)?;
+                    } else {
+                        return Err(LoxError::CompileError("Binary is missing an input."));
+                    }
                 }
                 self.emit_binary(node.node_id.token_type)
             }
@@ -291,7 +309,7 @@ impl<'source> Compiler<'source> {
 
     fn pop_func_compiler(&mut self) -> FuncCompiler {
         // #TODO can we include the return in the OpCode::Call?
-        self.emit_return();
+        self.emit(OpCode::Return);
 
         #[cfg(feature = "debug_print_code")]
         {
@@ -336,10 +354,6 @@ impl<'source> Compiler<'source> {
         let slot = self.make_constant(value)?;
         self.emit(OpCode::Constant(slot));
         Ok(())
-    }
-
-    fn emit_return(&mut self) {
-        self.emit(OpCode::Return);
     }
 
     fn make_constant(&mut self, value: Value) -> Result<Constant> {
