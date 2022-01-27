@@ -4,7 +4,7 @@ version = 3
 
 [[package]]
 name = "banjo-wasm"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "banjoc",
  "console_error_panic_hook",

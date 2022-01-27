@@ -45,7 +45,53 @@ impl<'source> Ast<'source> {
         if self.all_nodes.contains_key(node_id.lexeme) {
             let node = self.all_nodes.get_mut(node_id.lexeme).unwrap();
             if let Some(attributes) = attributes {
+                dbg!(&attributes);
                 node.attributes.merge(attributes);
+                dbg!(&node.attributes);
+
+                if let Some(type_attr) = node.attributes.node_type {
+                    let (needs_convert, body) = match node.node_type {
+                        NodeType::VariableReference => (true, None),
+                        NodeType::VariableDefinition { body } => (true, body),
+                        _ => (false, None),
+                    };
+                    if needs_convert {
+                        dbg!(&node);
+                        match type_attr.token_type {
+                            TokenType::Not | TokenType::Negate => {
+                                node.node_type = NodeType::Unary { argument: body }
+                            }
+                            TokenType::Subtract
+                            | TokenType::Divide
+                            | TokenType::Equals
+                            | TokenType::Greater
+                            | TokenType::GreaterEqual
+                            | TokenType::Less
+                            | TokenType::LessEqual => {
+                                node.node_type = NodeType::Binary {
+                                    term_a: body,
+                                    term_b: None,
+                                }
+                            }
+                            TokenType::Fn => {
+                                node.node_type = NodeType::FunctionDefinition { body, arity: 1 }
+                            }
+                            TokenType::Call => {
+                                node.node_type = NodeType::FunctionCall {
+                                    arguments: body.into_iter().collect(),
+                                }
+                            }
+                            TokenType::Ref => node.node_type = NodeType::VariableReference,
+                            TokenType::Param => node.node_type = NodeType::Param,
+                            TokenType::Return => {
+                                node.node_type = NodeType::Return { argument: body }
+                            }
+                            TokenType::Literal => node.node_type = NodeType::Literal,
+                            _ => {}
+                        }
+                        dbg!(&node);
+                    }
+                }
             }
             return node;
         }
@@ -143,6 +189,7 @@ impl<'source> NodeType<'source> {
             TokenType::GreaterEqual => NodeType::binary(),
             TokenType::Less => NodeType::binary(),
             TokenType::LessEqual => NodeType::binary(),
+            TokenType::Literal => NodeType::Literal,
             TokenType::Fn => NodeType::FunctionDefinition {
                 body: None,
                 arity: 0,
@@ -256,6 +303,9 @@ impl<'source> Attributes<'source> {
         }
         if other.label.is_some() {
             self.label = other.label;
+        }
+        if other.node_type.is_some() {
+            self.node_type = other.node_type;
         }
     }
 }
@@ -628,8 +678,9 @@ mod tests {
                 h [type=subtract]
                 j [type=gt]
                 k [type=gte]
-                l [type=lt]
-                m [type=lte]
+                l [type=literal]
+                m [type=lt]
+                n [type=lte]
             }
         "#;
         let parser = Parser::new(source);
@@ -676,10 +727,14 @@ mod tests {
         ));
         assert!(matches!(
             graph.get_node("l").unwrap().node_type,
-            NodeType::Binary { .. }
+            NodeType::Literal
         ));
         assert!(matches!(
             graph.get_node("m").unwrap().node_type,
+            NodeType::Binary { .. }
+        ));
+        assert!(matches!(
+            graph.get_node("n").unwrap().node_type,
             NodeType::Binary { .. }
         ));
     }

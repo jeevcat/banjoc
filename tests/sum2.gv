@@ -1,0 +1,5 @@
+digraph {
+  u032c3e8a8b1a42dd9741887fb06a468d [type=return]
+  z8bb76934dee14cab9c678bfd85720609 -> u032c3e8a8b1a42dd9741887fb06a468d
+  z8bb76934dee14cab9c678bfd85720609 [type=literal, label=6]
+}

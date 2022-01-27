@@ -163,6 +163,14 @@ impl<'source> Scanner<'source> {
                 b'v' => self.check_keyword(3, "ide", TokenType::Divide),
                 _ => TokenType::Identifier,
             },
+            b'l' if self.len() > 1 => match self.char_n(1) {
+                b'i' => self.check_keyword(2, "teral", TokenType::Literal),
+                b't' => match self.len() {
+                    2 => TokenType::Less,
+                    _ => self.check_keyword(2, "e", TokenType::LessEqual),
+                },
+                _ => TokenType::Identifier,
+            },
             b'n' if self.len() > 1 => match self.char_n(1) {
                 b'e' if self.len() > 2 => match self.char_n(2) {
                     b'g' => self.check_keyword(3, "ate", TokenType::Negate),
@@ -181,10 +189,6 @@ impl<'source> Scanner<'source> {
             b'g' if self.char_n(1) == b't' => match self.len() {
                 2 => TokenType::Greater,
                 _ => self.check_keyword(2, "e", TokenType::GreaterEqual),
-            },
-            b'l' if self.char_n(1) == b't' => match self.len() {
-                2 => TokenType::Less,
-                _ => self.check_keyword(2, "e", TokenType::LessEqual),
             },
             _ => TokenType::Identifier,
         }
@@ -304,6 +308,7 @@ pub enum TokenType {
     Ref,
     Param,
     Return,
+    Literal,
     Digraph,
     Arrow,
 
