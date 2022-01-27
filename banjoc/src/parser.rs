@@ -45,9 +45,7 @@ impl<'source> Ast<'source> {
         if self.all_nodes.contains_key(node_id.lexeme) {
             let node = self.all_nodes.get_mut(node_id.lexeme).unwrap();
             if let Some(attributes) = attributes {
-                dbg!(&attributes);
                 node.attributes.merge(attributes);
-                dbg!(&node.attributes);
 
                 if let Some(type_attr) = node.attributes.node_type {
                     let (needs_convert, body) = match node.node_type {
@@ -56,7 +54,6 @@ impl<'source> Ast<'source> {
                         _ => (false, None),
                     };
                     if needs_convert {
-                        dbg!(&node);
                         match type_attr.token_type {
                             TokenType::Not | TokenType::Negate => {
                                 node.node_type = NodeType::Unary { argument: body }
@@ -89,7 +86,6 @@ impl<'source> Ast<'source> {
                             TokenType::Literal => node.node_type = NodeType::Literal,
                             _ => {}
                         }
-                        dbg!(&node);
                     }
                 }
             }
