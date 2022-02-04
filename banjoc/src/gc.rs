@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    obj::{hash_string, Function, LoxString, NativeFunction, ObjectType},
+    obj::{hash_string, Function, BanjoString, NativeFunction, ObjectType},
     table::Table,
     value::Value,
 };
@@ -15,7 +15,7 @@ struct HeaderPtr(NonNull<ObjHeader>);
 impl HeaderPtr {
     fn size_of_val(&self) -> usize {
         match self.obj_type {
-            ObjectType::String => mem::size_of::<LoxString>(),
+            ObjectType::String => mem::size_of::<BanjoString>(),
             ObjectType::NativeFunction => mem::size_of::<NativeFunction>(),
             ObjectType::Function => mem::size_of::<Function>(),
         }
@@ -28,7 +28,7 @@ impl HeaderPtr {
     fn drop_ptr(&mut self) {
         // Must transmute to drop the full object, not just the header
         match self.obj_type {
-            ObjectType::String => self.transmute::<LoxString>().drop_ptr(),
+            ObjectType::String => self.transmute::<BanjoString>().drop_ptr(),
             ObjectType::NativeFunction => self.transmute::<NativeFunction>().drop_ptr(),
             ObjectType::Function => self.transmute::<Function>().drop_ptr(),
         }
@@ -60,7 +60,7 @@ impl DerefMut for HeaderPtr {
 impl Display for HeaderPtr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.obj_type {
-            ObjectType::String => self.transmute::<LoxString>().fmt(f),
+            ObjectType::String => self.transmute::<BanjoString>().fmt(f),
             ObjectType::NativeFunction => self.transmute::<NativeFunction>().fmt(f),
             ObjectType::Function => self.transmute::<Function>().fmt(f),
         }
@@ -192,13 +192,13 @@ impl Gc {
         }
     }
 
-    pub fn intern(&mut self, string: &str) -> GcRef<LoxString> {
+    pub fn intern(&mut self, string: &str) -> GcRef<BanjoString> {
         let hash = hash_string(string);
 
         if let Some(interned) = self.strings.find_string(string, hash) {
             interned
         } else {
-            let ls = self.alloc(LoxString::new(string.to_string()));
+            let ls = self.alloc(BanjoString::new(string.to_string()));
             self.strings.insert(ls, Value::Nil);
             ls
         }
@@ -359,10 +359,10 @@ mod tests {
     fn as_obj_transmute() {
         let mut gc = Gc::new();
 
-        let ls1 = LoxString::new("first".to_string());
+        let ls1 = BanjoString::new("first".to_string());
         let ls1 = gc.alloc(ls1);
         let obj = ls1.header();
-        let ls2 = obj.transmute::<LoxString>();
+        let ls2 = obj.transmute::<BanjoString>();
         assert_eq!((&ls1.header as *const _), (&ls2.header as *const _));
         assert_eq!((&ls1.hash as *const _), (&ls2.hash as *const _));
         assert_eq!(ls1.hash, ls2.hash);
@@ -371,13 +371,13 @@ mod tests {
 
     #[test]
     fn string_header() {
-        let ls = LoxString::new("what up".to_string());
+        let ls = BanjoString::new("what up".to_string());
         assert!(matches!(ls.header.obj_type, ObjectType::String));
     }
 
     #[test]
     fn function_header() {
-        let mut ls = LoxString::new("func".to_string());
+        let mut ls = BanjoString::new("func".to_string());
         let pointer = unsafe { NonNull::new_unchecked(&mut ls) };
         let gcref = GcRef { pointer };
         let ls = Function::new(Some(gcref));
@@ -388,13 +388,13 @@ mod tests {
     fn alloc() {
         let mut gc = Gc::new();
         let obj1 = {
-            let ls = LoxString::new("first".to_string());
+            let ls = BanjoString::new("first".to_string());
             let gcref = gc.alloc(ls);
             gcref.header()
         };
         assert_eq!(gc.first.unwrap().0, obj1.0);
         let obj2 = {
-            let ls = LoxString::new("second".to_string());
+            let ls = BanjoString::new("second".to_string());
             let gcref = gc.alloc(ls);
             gcref.header()
         };
@@ -408,18 +408,18 @@ mod tests {
         gc.intern("aaa");
         gc.intern("bbb");
         gc.intern("ccc");
-        let c = gc.first.unwrap().transmute::<LoxString>();
+        let c = gc.first.unwrap().transmute::<BanjoString>();
         assert_eq!(c.as_str(), "ccc");
-        let b = c.header.next.unwrap().transmute::<LoxString>();
+        let b = c.header.next.unwrap().transmute::<BanjoString>();
         assert_eq!(b.as_str(), "bbb");
-        let a = b.header.next.unwrap().transmute::<LoxString>();
+        let a = b.header.next.unwrap().transmute::<BanjoString>();
         assert_eq!(a.as_str(), "aaa");
     }
 
     #[test]
     fn size_of() {
         let mut gc = Gc::new();
-        let ls = LoxString::new("first".to_string());
+        let ls = BanjoString::new("first".to_string());
         let size = std::mem::size_of_val(&ls);
         gc.alloc(ls);
         assert_eq!(gc.first.unwrap().size_of_val(), size);

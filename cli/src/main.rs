@@ -4,7 +4,7 @@ use std::{
     process,
 };
 
-use banjoc::{error::LoxError, vm::Vm};
+use banjoc::{error::BanjoError, vm::Vm};
 
 fn repl(vm: &mut Vm) {
     loop {
@@ -34,17 +34,17 @@ fn run_file(vm: &mut Vm, path: &str) {
     match vm.interpret(&code) {
         Ok(result) => println!("{}", result),
         Err(error) => match error {
-            LoxError::CompileError(e) => {
+            BanjoError::CompileError(e) => {
                 eprint!("{e}");
                 process::exit(65);
             }
-            LoxError::CompileErrors(errors) => {
+            BanjoError::CompileErrors(errors) => {
                 for e in errors {
                     eprintln!("{e}");
                 }
                 process::exit(65);
             }
-            LoxError::RuntimeError(e) => {
+            BanjoError::RuntimeError(e) => {
                 eprintln!("{e}");
                 process::exit(70);
             }
@@ -59,7 +59,7 @@ fn main() {
         1 => repl(&mut vm),
         2 => run_file(&mut vm, &args[1]),
         _ => {
-            eprintln!("Usage: clox [path]");
+            eprintln!("Usage: banjo [path]");
             process::exit(64);
         }
     }

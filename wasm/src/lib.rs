@@ -1,6 +1,6 @@
 mod utils;
 
-use banjoc::{error::LoxError, value::Value, vm::Vm};
+use banjoc::{error::BanjoError, value::Value, vm::Vm};
 use utils::set_panic_hook;
 use wasm_bindgen::prelude::*;
 
@@ -16,11 +16,11 @@ pub fn interpret(source: &str) -> Result<JsValue, JsValue> {
     let mut vm = Vm::new();
     vm.interpret(source)
         .map_err(|e| match e {
-            LoxError::CompileError(msg) => JsValue::from_str(&format!("compile error: {msg}")),
-            LoxError::CompileErrors(msg) => {
+            BanjoError::CompileError(msg) => JsValue::from_str(&format!("compile error: {msg}")),
+            BanjoError::CompileErrors(msg) => {
                 JsValue::from_str(&format!("compiler errors:\n{}", msg.join("\n")))
             }
-            LoxError::RuntimeError(msg) => JsValue::from_str(&format!("runtime error: {msg}")),
+            BanjoError::RuntimeError(msg) => JsValue::from_str(&format!("runtime error: {msg}")),
         })
         .map(|v| match v {
             Value::Bool(b) => match b {

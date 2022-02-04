@@ -1,7 +1,7 @@
 use crate::{
-    error::{LoxError, Result},
+    error::{BanjoError, Result},
     gc::GcRef,
-    obj::{Function, LoxString},
+    obj::{Function, BanjoString},
     op_code::LocalIndex,
     scanner::Token,
 };
@@ -21,7 +21,7 @@ pub struct FuncCompiler<'source> {
 impl<'source> FuncCompiler<'source> {
     const MAX_LOCAL_COUNT: usize = u8::MAX as usize + 1;
 
-    pub fn new(function_name: Option<GcRef<LoxString>>) -> Self {
+    pub fn new(function_name: Option<GcRef<BanjoString>>) -> Self {
         let mut locals = Vec::with_capacity(Self::MAX_LOCAL_COUNT);
         // Claim stack slot zero for the VM's own internal use
         let name = Token::none();
@@ -48,7 +48,7 @@ impl<'source> FuncCompiler<'source> {
 
     pub fn add_local(&mut self, name: Token<'source>) -> Result<()> {
         if self.locals.len() == Self::MAX_LOCAL_COUNT {
-            return Err(LoxError::CompileError(
+            return Err(BanjoError::CompileError(
                 "Too many local variables in function.",
             ));
         }
@@ -79,7 +79,7 @@ impl<'source> FuncCompiler<'source> {
                 return if local.is_initialized() {
                     Ok(Some(i as u8))
                 } else {
-                    Err(LoxError::CompileError(
+                    Err(BanjoError::CompileError(
                         "Can't read local variable in its own initializer.",
                     ))
                 };
@@ -122,7 +122,7 @@ impl<'source> FuncCompiler<'source> {
         self.function.arity += 1;
 
         if self.function.arity > 255 {
-            Err(LoxError::CompileError(
+            Err(BanjoError::CompileError(
                 "Can't have more than 255 parameters.",
             ))
         } else {

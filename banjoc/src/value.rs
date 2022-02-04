@@ -5,9 +5,9 @@ use std::{
 };
 
 use crate::{
-    error::{LoxError, Result},
+    error::{BanjoError, Result},
     gc::{GarbageCollect, Gc, GcRef},
-    obj::{Function, LoxString, NativeFunction},
+    obj::{Function, BanjoString, NativeFunction},
     vm::Vm,
 };
 
@@ -17,7 +17,7 @@ pub enum Value {
     Nil,
     Number(f64),
     // Following are pointers to garbage collected objects. Value is NOT deep copied.
-    String(GcRef<LoxString>),
+    String(GcRef<BanjoString>),
     NativeFunction(GcRef<NativeFunction>),
     Function(GcRef<Function>),
 }
@@ -39,7 +39,7 @@ impl Value {
                 a.as_str(),
                 b.as_str()
             )))),
-            _ => Err(LoxError::RuntimeError(
+            _ => Err(BanjoError::RuntimeError(
                 "Operands must be two numbers or two strings.".to_string(),
             )),
         }
@@ -48,7 +48,7 @@ impl Value {
     pub fn binary_op(self, rhs: Self, f: impl Fn(f64, f64) -> Value) -> Result<Self> {
         match (self, rhs) {
             (Value::Number(a), Value::Number(b)) => Ok(f(a, b)),
-            _ => Err(LoxError::RuntimeError(
+            _ => Err(BanjoError::RuntimeError(
                 "Operands must be numbers.".to_string(),
             )),
         }

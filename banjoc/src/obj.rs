@@ -15,16 +15,16 @@ pub enum ObjectType {
     Function,
 }
 
-pub struct LoxString {
+pub struct BanjoString {
     pub header: ObjHeader,
     string: String,
     pub hash: u32,
 }
 
-impl LoxString {
-    pub fn new(string: String) -> LoxString {
+impl BanjoString {
+    pub fn new(string: String) -> BanjoString {
         let hash = hash_string(&string);
-        LoxString {
+        BanjoString {
             header: ObjHeader::new(ObjectType::String),
             string,
             hash,
@@ -36,7 +36,7 @@ impl LoxString {
     }
 }
 
-impl Display for LoxString {
+impl Display for BanjoString {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         Display::fmt(&self.string, f)
     }
@@ -56,11 +56,11 @@ pub struct Function {
     pub header: ObjHeader,
     pub arity: usize,
     pub chunk: Chunk,
-    pub name: Option<GcRef<LoxString>>,
+    pub name: Option<GcRef<BanjoString>>,
 }
 
 impl Function {
-    pub fn new(name: Option<GcRef<LoxString>>) -> Self {
+    pub fn new(name: Option<GcRef<BanjoString>>) -> Self {
         Self {
             header: ObjHeader::new(ObjectType::Function),
             arity: 0,

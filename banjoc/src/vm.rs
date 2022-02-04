@@ -6,9 +6,9 @@ use std::{
 
 use crate::{
     compiler,
-    error::{LoxError, Result},
+    error::{BanjoError, Result},
     gc::{GarbageCollect, Gc, GcRef},
-    obj::{Function, LoxString, NativeFn, NativeFunction},
+    obj::{Function, BanjoString, NativeFn, NativeFunction},
     op_code::{Constant, LocalIndex, OpCode},
     stack::Stack,
     table::Table,
@@ -49,7 +49,7 @@ impl Vm {
             args.iter()
                 .cloned()
                 .reduce(|accum, item| accum.add(item, vm).unwrap_or(accum))
-                .ok_or_else(|| LoxError::RuntimeError("Expected at least 1 argument.".to_string()))
+                .ok_or_else(|| BanjoError::RuntimeError("Expected at least 1 argument.".to_string()))
         });
         vm.define_native("product", |args, _| {
             args.iter()
@@ -59,7 +59,7 @@ impl Vm {
                         .binary_op(item, |a, b| Value::Number(a * b))
                         .unwrap_or(accum)
                 })
-                .ok_or_else(|| LoxError::RuntimeError("Expected at least 1 argument.".to_string()))
+                .ok_or_else(|| BanjoError::RuntimeError("Expected at least 1 argument.".to_string()))
         });
 
         vm
@@ -171,7 +171,7 @@ impl Vm {
         self.frames.top()
     }
 
-    fn read_string(&mut self, constant: Constant) -> GcRef<LoxString> {
+    fn read_string(&mut self, constant: Constant) -> GcRef<BanjoString> {
         match self.current_frame().read_constant(constant) {
             Value::String(name) => name,
             _ => unreachable!(),
@@ -234,7 +234,7 @@ impl Vm {
             eprintln!("in {}", *closure);
         }
 
-        Err(LoxError::RuntimeError(message.to_string()))
+        Err(BanjoError::RuntimeError(message.to_string()))
     }
 
     fn define_native(&mut self, name: &str, function: NativeFn) {
@@ -247,7 +247,7 @@ impl Vm {
         self.stack.pop();
     }
 
-    pub fn intern(&mut self, string: &str) -> GcRef<LoxString> {
+    pub fn intern(&mut self, string: &str) -> GcRef<BanjoString> {
         self.mark_and_collect_garbage();
         self.gc.intern(string)
     }

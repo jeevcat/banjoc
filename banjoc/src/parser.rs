@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    error::{LoxError, Result},
+    error::{BanjoError, Result},
     scanner::{Scanner, Token, TokenType},
 };
 
@@ -227,7 +227,7 @@ impl<'source> NodeType<'source> {
 
     fn set_argument(argument: &mut Option<NodeId<'source>>, input: NodeId<'source>) -> Result<()> {
         match argument {
-            Some(_) => return Err(LoxError::CompileError("Node can only have 1 input.")),
+            Some(_) => return Err(BanjoError::CompileError("Node can only have 1 input.")),
             None => *argument = Some(input),
         }
         Ok(())
@@ -245,15 +245,15 @@ impl<'source> NodeType<'source> {
             NodeType::FunctionDefinition { body, .. } => Self::set_argument(body, input)?,
             NodeType::Return { argument } => Self::set_argument(argument, input)?,
             NodeType::Literal => {
-                return Err(LoxError::CompileError("A literal cannot have an input."))
+                return Err(BanjoError::CompileError("A literal cannot have an input."))
             }
             NodeType::Param => {
-                return Err(LoxError::CompileError("A parameter cannot have an input."))
+                return Err(BanjoError::CompileError("A parameter cannot have an input."))
             }
             NodeType::Unary { argument } => Self::set_argument(argument, input)?,
             NodeType::Binary { term_a, term_b } => match term_a {
                 Some(_) => match term_b {
-                    Some(_) => return Err(LoxError::CompileError("Node can only have 2 inputs.")),
+                    Some(_) => return Err(BanjoError::CompileError("Node can only have 2 inputs.")),
                     None => *term_b = Some(input),
                 },
                 None => *term_a = Some(input),
@@ -273,7 +273,7 @@ impl<'source> NodeType<'source> {
                 }
             }
             NodeType::Return { .. } => {
-                return Err(LoxError::CompileError("A return cannot have an output."))
+                return Err(BanjoError::CompileError("A return cannot have an output."))
             }
             _ => {}
         }
@@ -365,8 +365,8 @@ impl<'source> Tokens<'source> {
         self.error_at(self.previous, message);
     }
 
-    fn error(&mut self, error: LoxError) {
-        if let LoxError::CompileError(message) = error {
+    fn error(&mut self, error: BanjoError) {
+        if let BanjoError::CompileError(message) = error {
             self.error_at(self.previous, message)
         }
     }

@@ -2,18 +2,18 @@ use std::{cmp::max, iter};
 
 use crate::{
     gc::{GarbageCollect, Gc, GcRef},
-    obj::LoxString,
+    obj::BanjoString,
     value::Value,
 };
 
 struct Entry {
     // The table doesn't own any of the strings used as keys.
     // Their lifetime is the responsibility of the gc
-    key: Option<GcRef<LoxString>>,
+    key: Option<GcRef<BanjoString>>,
     value: Value,
 }
 
-/// A hashmap with key: LoxString and val: Value
+/// A hashmap with key: BanjoString and val: Value
 pub struct Table {
     // Number of populated entries plus tombstones
     count: usize,
@@ -29,7 +29,7 @@ impl Table {
         }
     }
 
-    pub fn insert(&mut self, key: GcRef<LoxString>, value: Value) -> bool {
+    pub fn insert(&mut self, key: GcRef<BanjoString>, value: Value) -> bool {
         if self.count + 1 > (self.capacity() as f64 * Table::MAX_LOAD) as usize {
             self.grow();
         }
@@ -45,7 +45,7 @@ impl Table {
         is_new_key
     }
 
-    pub fn get(&self, key: GcRef<LoxString>) -> Option<Value> {
+    pub fn get(&self, key: GcRef<BanjoString>) -> Option<Value> {
         if self.count == 0 {
             return None;
         }
@@ -58,7 +58,7 @@ impl Table {
         }
     }
 
-    pub fn remove(&mut self, key: GcRef<LoxString>) -> bool {
+    pub fn remove(&mut self, key: GcRef<BanjoString>) -> bool {
         if self.count == 0 {
             return false;
         }
@@ -74,7 +74,7 @@ impl Table {
         true
     }
 
-    pub fn find_string(&self, string: &str, hash: u32) -> Option<GcRef<LoxString>> {
+    pub fn find_string(&self, string: &str, hash: u32) -> Option<GcRef<BanjoString>> {
         if self.count == 0 {
             return None;
         }
@@ -144,7 +144,7 @@ impl Table {
     }
 }
 
-fn find_entry(entries: &[Entry], key: GcRef<LoxString>) -> &Entry {
+fn find_entry(entries: &[Entry], key: GcRef<BanjoString>) -> &Entry {
     let mut index = key.hash as usize & (entries.len() - 1);
     // The first seen tombstone
     let mut tombstone = None;
@@ -180,7 +180,7 @@ fn find_entry(entries: &[Entry], key: GcRef<LoxString>) -> &Entry {
     }
 }
 
-fn find_entry_mut(entries: &mut [Entry], key: GcRef<LoxString>) -> &mut Entry {
+fn find_entry_mut(entries: &mut [Entry], key: GcRef<BanjoString>) -> &mut Entry {
     let len = entries.len();
     let mut index = key.hash as usize & (len - 1);
     // The first seen tombstone
@@ -237,7 +237,7 @@ mod tests {
     #[test]
     fn insertion() {
         // Generate some strings
-        let mut strings: Vec<_> = (0..100000).map(|n| LoxString::new(n.to_string())).collect();
+        let mut strings: Vec<_> = (0..100000).map(|n| BanjoString::new(n.to_string())).collect();
 
         // Simulate being held by gc
         let refs = make_refs(&mut strings);
@@ -262,7 +262,7 @@ mod tests {
     #[test]
     fn deletion() {
         // Generate some strings
-        let mut strings: Vec<_> = (0..1000).map(|n| LoxString::new(n.to_string())).collect();
+        let mut strings: Vec<_> = (0..1000).map(|n| BanjoString::new(n.to_string())).collect();
 
         // Simulate being held by gc
         let mut refs = make_refs(&mut strings);
@@ -288,7 +288,7 @@ mod tests {
         }
     }
 
-    fn make_refs(strings: &mut [LoxString]) -> Vec<GcRef<LoxString>> {
+    fn make_refs(strings: &mut [BanjoString]) -> Vec<GcRef<BanjoString>> {
         strings
             .iter_mut()
             .map(|ls| GcRef {
@@ -305,7 +305,7 @@ mod tests {
         }
     }
 
-    fn str_to_num(string: GcRef<LoxString>) -> i32 {
+    fn str_to_num(string: GcRef<BanjoString>) -> i32 {
         string.as_str().parse().unwrap()
     }
 }

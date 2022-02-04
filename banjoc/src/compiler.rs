@@ -2,7 +2,7 @@ use std::mem::{self};
 
 use crate::{
     chunk::Chunk,
-    error::{append, LoxError, Result},
+    error::{append, BanjoError, Result},
     func_compiler::FuncCompiler,
     gc::{Gc, GcRef},
     obj::Function,
@@ -49,7 +49,7 @@ impl<'source> Compiler<'source> {
 
         let return_node = ast
             .get_return_node()
-            .ok_or(LoxError::CompileError("No return node."))?;
+            .ok_or(BanjoError::CompileError("No return node."))?;
         if let Err(e) = self.node(ast, return_node) {
             append(&mut result, e);
         }
@@ -71,14 +71,14 @@ impl<'source> Compiler<'source> {
                 if let Some(body_node) = get_node(ast, body) {
                     self.fun_declaration(ast, body_node, node.get_name())?
                 } else {
-                    return Err(LoxError::CompileError("Function definition has no input."));
+                    return Err(BanjoError::CompileError("Function definition has no input."));
                 }
             }
             NodeType::VariableDefinition { body } => {
                 if let Some(body_node) = get_node(ast, body) {
                     self.var_declaration(ast, body_node, node.get_name())?
                 } else {
-                    return Err(LoxError::CompileError("Variable definition has no input."));
+                    return Err(BanjoError::CompileError("Variable definition has no input."));
                 }
             }
             NodeType::Param => {
@@ -109,7 +109,7 @@ impl<'source> Compiler<'source> {
                     self.node(ast, argument)?;
                     self.emit_unary(node.node_id.token_type);
                 } else {
-                    return Err(LoxError::CompileError("Unary has no input."));
+                    return Err(BanjoError::CompileError("Unary has no input."));
                 }
             }
             NodeType::Binary { term_a, term_b } => {
@@ -117,7 +117,7 @@ impl<'source> Compiler<'source> {
                     if let Some(term) = get_node(ast, term) {
                         self.node(ast, term)?;
                     } else {
-                        return Err(LoxError::CompileError("Binary is missing an input."));
+                        return Err(BanjoError::CompileError("Binary is missing an input."));
                     }
                 }
                 self.emit_binary(node.node_id.token_type)
@@ -259,7 +259,7 @@ impl<'source> Compiler<'source> {
         Ok(())
     }
 
-    /// Declare existance of local or global variable, not yet assigning a value
+    /// Declare existence of local or global variable, not yet assigning a value
     fn declare_variable(&mut self, name: Token<'source>) -> Option<Constant> {
         // At runtime, locals aren’t looked up by name.
         // There’s no need to stuff the variable’s name into the constant table, so if
@@ -276,7 +276,7 @@ impl<'source> Compiler<'source> {
         debug_assert!(self.compiler.is_local_scope());
 
         if self.compiler.is_local_already_in_scope(name) {
-            return Err(LoxError::CompileError(
+            return Err(BanjoError::CompileError(
                 "Already a variable with this name in this scope.",
             ));
         }
@@ -361,7 +361,7 @@ impl<'source> Compiler<'source> {
         if constant > u8::MAX.into() {
             // TODO we'd want to add another instruction like OpCode::Constant16 which
             // stores the index as a two-byte operand when this limit is hit
-            return Err(LoxError::CompileError("Too many constants in one chunk."));
+            return Err(BanjoError::CompileError("Too many constants in one chunk."));
         }
         Ok(Constant {
             slot: constant.try_into().unwrap(),
