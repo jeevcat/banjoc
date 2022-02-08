@@ -1,7 +1,7 @@
 use crate::{
     error::{BanjoError, Result},
     gc::GcRef,
-    obj::{Function, BanjoString},
+    obj::{BanjoString, Function},
     op_code::LocalIndex,
     scanner::Token,
 };

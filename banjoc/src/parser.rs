@@ -248,12 +248,16 @@ impl<'source> NodeType<'source> {
                 return Err(BanjoError::CompileError("A literal cannot have an input."))
             }
             NodeType::Param => {
-                return Err(BanjoError::CompileError("A parameter cannot have an input."))
+                return Err(BanjoError::CompileError(
+                    "A parameter cannot have an input.",
+                ))
             }
             NodeType::Unary { argument } => Self::set_argument(argument, input)?,
             NodeType::Binary { term_a, term_b } => match term_a {
                 Some(_) => match term_b {
-                    Some(_) => return Err(BanjoError::CompileError("Node can only have 2 inputs.")),
+                    Some(_) => {
+                        return Err(BanjoError::CompileError("Node can only have 2 inputs."))
+                    }
                     None => *term_b = Some(input),
                 },
                 None => *term_a = Some(input),

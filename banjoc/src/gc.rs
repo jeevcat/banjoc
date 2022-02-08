@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    obj::{hash_string, Function, BanjoString, NativeFunction, ObjectType},
+    obj::{hash_string, BanjoString, Function, NativeFunction, ObjectType},
     table::Table,
     value::Value,
 };

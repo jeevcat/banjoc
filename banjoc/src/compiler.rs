@@ -71,14 +71,18 @@ impl<'source> Compiler<'source> {
                 if let Some(body_node) = get_node(ast, body) {
                     self.fun_declaration(ast, body_node, node.get_name())?
                 } else {
-                    return Err(BanjoError::CompileError("Function definition has no input."));
+                    return Err(BanjoError::CompileError(
+                        "Function definition has no input.",
+                    ));
                 }
             }
             NodeType::VariableDefinition { body } => {
                 if let Some(body_node) = get_node(ast, body) {
                     self.var_declaration(ast, body_node, node.get_name())?
                 } else {
-                    return Err(BanjoError::CompileError("Variable definition has no input."));
+                    return Err(BanjoError::CompileError(
+                        "Variable definition has no input.",
+                    ));
                 }
             }
             NodeType::Param => {

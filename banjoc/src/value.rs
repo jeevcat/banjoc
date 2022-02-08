@@ -7,7 +7,7 @@ use std::{
 use crate::{
     error::{BanjoError, Result},
     gc::{GarbageCollect, Gc, GcRef},
-    obj::{Function, BanjoString, NativeFunction},
+    obj::{BanjoString, Function, NativeFunction},
     vm::Vm,
 };
 

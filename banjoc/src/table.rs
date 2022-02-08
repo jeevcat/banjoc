@@ -237,7 +237,9 @@ mod tests {
     #[test]
     fn insertion() {
         // Generate some strings
-        let mut strings: Vec<_> = (0..100000).map(|n| BanjoString::new(n.to_string())).collect();
+        let mut strings: Vec<_> = (0..100000)
+            .map(|n| BanjoString::new(n.to_string()))
+            .collect();
 
         // Simulate being held by gc
         let refs = make_refs(&mut strings);
