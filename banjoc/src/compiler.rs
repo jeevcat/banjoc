@@ -170,7 +170,7 @@ impl<'source> Compiler<'source> {
             TokenType::True => self.emit(OpCode::True),
             TokenType::Number => self.number(token)?,
             TokenType::String => self.string(token)?,
-            _ => unreachable!(),
+            _ => unreachable!(format!("Trying to make literal from {token:?}")),
         }
         Ok(())
     }
