@@ -1,0 +1,25 @@
+{
+  "nodes": [
+    {
+      "id": "return",
+      "type": "return",
+      "arguments": []
+    },
+    {
+      "id": "sum",
+      "type": "call",
+      "name": "sum",
+      "arguments": ["a", "b"]
+    },
+    {
+      "id": "a",
+      "type": "literal",
+      "value": 1
+    },
+    {
+      "id": "b",
+      "type": "literal",
+      "value": 2
+    }
+  ]
+}

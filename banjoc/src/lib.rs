@@ -1,3 +1,4 @@
+mod ast;
 mod chunk;
 mod compiler;
 #[cfg(any(feature = "debug_trace_execution", feature = "debug_print_code"))]

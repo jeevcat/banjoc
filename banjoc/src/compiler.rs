@@ -12,43 +12,46 @@ use crate::{
     value::Value,
 };
 
-pub fn compile(ast: &Ast, vm: &mut Gc) -> Result<GcRef<Function>> {
-    let mut compiler = Compiler::new(vm);
+pub fn compile(ast: &Ast, gc: &mut Gc) -> Result<GcRef<Function>> {
+    let mut compiler = Compiler::new(ast, gc);
 
-    compiler.compile(ast)?;
+    compiler.compile()?;
 
     let function = compiler.pop_func_compiler().function;
 
-    Ok(vm.alloc(function))
+    Ok(gc.alloc(function))
 }
 
 struct Compiler<'source> {
     // TODO: this should be an option
     compiler: Box<FuncCompiler<'source>>,
     gc: &'source mut Gc,
+    ast: &'source Ast<'source>,
 }
 
 impl<'source> Compiler<'source> {
-    fn new(gc: &'source mut Gc) -> Compiler<'source> {
+    fn new(ast: &'source Ast, gc: &'source mut Gc) -> Compiler<'source> {
         Self {
             compiler: Box::new(FuncCompiler::new(None)),
             gc,
+            ast,
         }
     }
 
-    fn compile(&mut self, ast: &'source Ast<'source>) -> Result<()> {
+    fn compile(&mut self) -> Result<()> {
         let mut result = Ok(());
         self.begin_scope();
-        for node in ast.get_definitions() {
-            if let Err(e) = self.node(ast, node) {
+        for node in self.ast.get_definitions() {
+            if let Err(e) = self.node(node) {
                 append(&mut result, e);
             }
         }
 
-        let return_node = ast
+        let return_node = self
+            .ast
             .get_return_node()
             .ok_or(BanjoError::CompileError("No return node."))?;
-        if let Err(e) = self.node(ast, return_node) {
+        if let Err(e) = self.node(return_node) {
             append(&mut result, e);
         }
         self.end_scope();
@@ -56,7 +59,7 @@ impl<'source> Compiler<'source> {
         result
     }
 
-    fn node(&mut self, ast: &'source Ast<'source>, node: &'source Node<'source>) -> Result<()> {
+    fn node(&mut self, node: &'source Node<'source>) -> Result<()> {
         fn get_node<'source>(
             ast: &'source Ast,
             node_id: &Option<NodeId>,
@@ -66,8 +69,8 @@ impl<'source> Compiler<'source> {
         match &node.node_type {
             NodeType::Literal => self.literal(node.get_name())?,
             NodeType::FunctionDefinition { body, .. } => {
-                if let Some(body_node) = get_node(ast, body) {
-                    self.fun_declaration(ast, body_node, node.get_name())?
+                if let Some(body_node) = get_node(self.ast, body) {
+                    self.fun_declaration(body_node, node.get_name())?
                 } else {
                     return Err(BanjoError::CompileError(
                         "Function definition has no input.",
@@ -75,8 +78,8 @@ impl<'source> Compiler<'source> {
                 }
             }
             NodeType::VariableDefinition { body } => {
-                if let Some(body_node) = get_node(ast, body) {
-                    self.var_declaration(ast, body_node, node.get_name())?
+                if let Some(body_node) = get_node(self.ast, body) {
+                    self.var_declaration(body_node, node.get_name())?
                 } else {
                     return Err(BanjoError::CompileError(
                         "Variable definition has no input.",
@@ -96,19 +99,19 @@ impl<'source> Compiler<'source> {
             NodeType::VariableReference => self.named_variable(node.get_name())?,
             NodeType::FunctionCall { arguments } => {
                 self.named_variable(node.get_name())?;
-                self.call(ast, arguments)?;
+                self.call(arguments)?;
             }
             NodeType::Return { argument } => {
-                if let Some(argument) = get_node(ast, argument) {
-                    self.node(ast, argument)?;
+                if let Some(argument) = get_node(self.ast, argument) {
+                    self.node(argument)?;
                 } else {
                     self.emit(OpCode::Nil);
                 }
                 self.emit(OpCode::Return);
             }
             NodeType::Unary { argument } => {
-                if let Some(argument) = get_node(ast, argument) {
-                    self.node(ast, argument)?;
+                if let Some(argument) = get_node(self.ast, argument) {
+                    self.node(argument)?;
                     self.emit_unary(node.node_id.token_type);
                 } else {
                     return Err(BanjoError::CompileError("Unary has no input."));
@@ -116,8 +119,8 @@ impl<'source> Compiler<'source> {
             }
             NodeType::Binary { term_a, term_b } => {
                 for term in [term_a, term_b] {
-                    if let Some(term) = get_node(ast, term) {
-                        self.node(ast, term)?;
+                    if let Some(term) = get_node(self.ast, term) {
+                        self.node(term)?;
                     } else {
                         return Err(BanjoError::CompileError("Binary is missing an input."));
                     }
@@ -168,7 +171,7 @@ impl<'source> Compiler<'source> {
             TokenType::True => self.emit(OpCode::True),
             TokenType::Number => self.number(token)?,
             TokenType::String => self.string(token)?,
-            _ => unreachable!(format!("Trying to make literal from {token:?}")),
+            _ => unreachable!("Trying to make literal from {token:?}"),
         }
         Ok(())
     }
@@ -204,27 +207,21 @@ impl<'source> Compiler<'source> {
 
     fn fun_declaration(
         &mut self,
-        ast: &'source Ast<'source>,
         body_node: &'source Node<'source>,
         name: Token<'source>,
     ) -> Result<()> {
         let global = self.declare_variable(name);
         self.compiler.mark_var_initialized();
-        self.function(ast, body_node, name)?;
+        self.function(body_node, name)?;
         self.define_variable(global);
         Ok(())
     }
 
-    fn function(
-        &mut self,
-        ast: &'source Ast<'source>,
-        body_node: &'source Node<'source>,
-        name: Token<'source>,
-    ) -> Result<()> {
+    fn function(&mut self, body_node: &'source Node<'source>, name: Token<'source>) -> Result<()> {
         self.push_func_compiler(name.lexeme);
         self.begin_scope();
 
-        self.node(ast, body_node)?;
+        self.node(body_node)?;
 
         // Because we end the compiler completely, there’s no need to close the
         // lingering outermost scope with end_scope().
@@ -236,10 +233,10 @@ impl<'source> Compiler<'source> {
         Ok(())
     }
 
-    fn call(&mut self, ast: &'source Ast, arguments: &[NodeId<'source>]) -> Result<()> {
+    fn call(&mut self, arguments: &[NodeId<'source>]) -> Result<()> {
         for arg in arguments {
-            let arg = ast.get_node(arg).unwrap();
-            self.node(ast, arg)?;
+            let arg = self.ast.get_node(arg).unwrap();
+            self.node(arg)?;
         }
         self.emit(OpCode::Call {
             arg_count: arguments.len() as u8,
@@ -249,13 +246,12 @@ impl<'source> Compiler<'source> {
 
     fn var_declaration(
         &mut self,
-        ast: &'source Ast<'source>,
         body_node: &'source Node<'source>,
         name: Token<'source>,
     ) -> Result<()> {
         let global = self.declare_variable(name);
 
-        self.node(ast, body_node)?;
+        self.node(body_node)?;
 
         self.define_variable(global);
         Ok(())
