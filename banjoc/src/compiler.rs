@@ -1,14 +1,13 @@
 use std::mem::{self};
 
 use crate::{
+    ast::{Ast, Node, NodeId, NodeType},
     chunk::Chunk,
     error::{append, BanjoError, Result},
     func_compiler::FuncCompiler,
     gc::{Gc, GcRef},
     obj::Function,
     op_code::{Constant, OpCode},
-    parser::{Ast, Node, NodeId, NodeType},
-    scanner::{Token, TokenType},
     value::Value,
 };
 
@@ -67,27 +66,36 @@ impl<'source> Compiler<'source> {
             ast.get_node(node_id.as_ref()?)
         }
         match &node.node_type {
-            NodeType::Literal => self.literal(node.get_name())?,
-            NodeType::FunctionDefinition { body, .. } => {
-                if let Some(body_node) = get_node(self.ast, body) {
-                    self.fun_declaration(body_node, node.get_name())?
+            NodeType::Literal { value } => self.literal(value)?,
+            NodeType::FunctionDefinition { arguments, name } => {
+                if arguments.len() != 1 {
+                    return Err(BanjoError::CompileError(
+                        "Function definition has invalid input.",
+                    ));
+                }
+                if let Some(body_node) = self.ast.get_node(arguments[0]) {
+                    self.fun_declaration(body_node, name)?
                 } else {
                     return Err(BanjoError::CompileError(
                         "Function definition has no input.",
                     ));
                 }
             }
-            NodeType::VariableDefinition { body } => {
-                if let Some(body_node) = get_node(self.ast, body) {
-                    self.var_declaration(body_node, node.get_name())?
+            NodeType::VariableDefinition { arguments, name } => {
+                if arguments.len() != 1 {
+                    return Err(BanjoError::CompileError(
+                        "Variable definition has invalid input.",
+                    ));
+                }
+                if let Some(body_node) = self.ast.get_node(arguments[0]) {
+                    self.var_declaration(body_node, name)?
                 } else {
                     return Err(BanjoError::CompileError(
                         "Variable definition has no input.",
                     ));
                 }
             }
-            NodeType::Param => {
-                let name = node.get_name();
+            NodeType::Param { name } => {
                 // Only declare the param once, but allow same param to be input many times
                 if !self.compiler.is_local_already_in_scope(name) {
                     self.compiler.increment_arity()?;
@@ -96,13 +104,16 @@ impl<'source> Compiler<'source> {
                 }
                 self.named_variable(name)?;
             }
-            NodeType::VariableReference => self.named_variable(node.get_name())?,
-            NodeType::FunctionCall { arguments } => {
-                self.named_variable(node.get_name())?;
+            NodeType::VariableReference { name } => self.named_variable(name)?,
+            NodeType::FunctionCall { arguments, name } => {
+                self.named_variable(name)?;
                 self.call(arguments)?;
             }
-            NodeType::Return { argument } => {
-                if let Some(argument) = get_node(self.ast, argument) {
+            NodeType::Return { arguments } => {
+                if arguments.len() != 1 {
+                    return Err(BanjoError::CompileError("Return has invalid input."));
+                }
+                if let Some(argument) = self.ast.get_node(arguments[0]) {
                     self.node(argument)?;
                 } else {
                     self.emit(OpCode::Nil);

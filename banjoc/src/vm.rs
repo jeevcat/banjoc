@@ -5,12 +5,12 @@ use std::{
 };
 
 use crate::{
+    ast::Ast,
     compiler,
     error::{BanjoError, Result},
     gc::{GarbageCollect, Gc, GcRef},
     obj::{BanjoString, Function, NativeFn, NativeFunction},
     op_code::{Constant, LocalIndex, OpCode},
-    parser::Ast,
     stack::Stack,
     table::Table,
     value::Value,

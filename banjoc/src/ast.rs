@@ -2,34 +2,83 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Deserializer};
 
+pub type NodeId<'source> = &'source str;
+
 #[derive(Deserialize, Debug)]
-struct Ast<'source> {
+pub struct Ast<'source> {
     #[serde(borrow, deserialize_with = "deserialize_nodes")]
-    nodes: HashMap<&'source str, Node<'source>>,
+    nodes: HashMap<NodeId<'source>, Node<'source>>,
+}
+
+impl<'source> Ast<'source> {
+    pub fn get_node(&self, node_id: NodeId) -> Option<&Node> {
+        self.nodes.get(node_id)
+    }
+
+    pub fn get_return_node(&self) -> Option<&Node> {
+        // TODO perf
+        self.nodes
+            .iter()
+            .map(|(_, node)| node)
+            .find(|node| matches!(node.node_type, NodeType::Return { .. }))
+    }
+
+    pub fn get_definitions(&self) -> impl Iterator<Item = &Node> {
+        // TODO perf
+        self.nodes.iter().map(|(_, node)| node).filter(|node| {
+            matches!(
+                node.node_type,
+                NodeType::VariableDefinition { .. } | NodeType::FunctionDefinition { .. }
+            )
+        })
+    }
 }
 
 #[derive(Deserialize, Debug)]
 struct BaseNode<'source> {
     id: &'source str,
     comment: Option<&'source str>,
-    #[serde(default)]
-    arguments: Vec<&'source str>,
 }
 
 #[derive(Deserialize, Debug)]
 #[serde(tag = "type", rename_all = "lowercase")]
-enum NodeType<'source> {
-    Literal { value: f64 },
-    Call { name: &'source str },
-    Return,
+pub enum NodeType<'source> {
+    Literal {
+        value: f64,
+    },
+    #[serde(alias = "call")]
+    FunctionCall {
+        name: &'source str,
+        arguments: Vec<&'source str>,
+    },
+    #[serde(alias = "fn")]
+    FunctionDefinition {
+        name: &'source str,
+        arguments: Vec<&'source str>,
+    },
+    #[serde(alias = "ref")]
+    VariableReference {
+        name: &'source str,
+    },
+    #[serde(alias = "var")]
+    VariableDefinition {
+        name: &'source str,
+        arguments: Vec<&'source str>,
+    },
+    Param {
+        name: &'source str,
+    },
+    Return {
+        arguments: Vec<&'source str>,
+    },
 }
 
 #[derive(Deserialize, Debug)]
-struct Node<'source> {
+pub struct Node<'source> {
     #[serde(borrow, flatten)]
     base: BaseNode<'source>,
     #[serde(borrow, flatten)]
-    node_type: NodeType<'source>,
+    pub node_type: NodeType<'source>,
 }
 
 fn deserialize_nodes<'de: 'source, 'source, D>(
