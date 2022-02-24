@@ -1,6 +1,6 @@
 mod utils;
 
-use banjoc::{error::BanjoError, value::Value, vm::Vm};
+use banjoc::{error::BanjoError, parser::Parser, value::Value, vm::Vm};
 use utils::set_panic_hook;
 use wasm_bindgen::prelude::*;
 
@@ -13,8 +13,7 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 #[wasm_bindgen(catch)]
 pub fn interpret(source: &str) -> Result<JsValue, JsValue> {
     set_panic_hook();
-    let mut vm = Vm::new();
-    vm.interpret(source)
+    parse_interpret(source)
         .map_err(|e| match e {
             BanjoError::CompileError(msg) => JsValue::from_str(&format!("compile error: {msg}")),
             BanjoError::CompileErrors(msg) => {
@@ -32,4 +31,11 @@ pub fn interpret(source: &str) -> Result<JsValue, JsValue> {
             Value::String(s) => JsValue::from_str(s.as_str()),
             _ => JsValue::from_str(&format!("{v}")),
         })
+}
+
+fn parse_interpret(source: &str) -> Result<Value, BanjoError> {
+    let mut vm = Vm::new();
+    let parser = Parser::new(source);
+    let ast = parser.parse()?;
+    vm.interpret(&ast)
 }

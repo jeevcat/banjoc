@@ -4,7 +4,12 @@ use std::{
     process,
 };
 
-use banjoc::{error::BanjoError, vm::Vm};
+use banjoc::{
+    error::{BanjoError, Result},
+    parser::Parser,
+    value::Value,
+    vm::Vm,
+};
 
 fn repl(vm: &mut Vm) {
     loop {
@@ -17,21 +22,21 @@ fn repl(vm: &mut Vm) {
         if line.is_empty() {
             break;
         }
-        if let Ok(result) = vm.interpret(&line) {
+        if let Ok(result) = interpret(vm, &line) {
             println!("{}", result);
         }
     }
 }
 
 fn run_file(vm: &mut Vm, path: &str) {
-    let code = match fs::read_to_string(path) {
+    let source = match fs::read_to_string(path) {
         Ok(content) => content,
         Err(error) => {
             eprint!("Unable to read file {}: {}", path, error);
             process::exit(74);
         }
     };
-    match vm.interpret(&code) {
+    match interpret(vm, &source) {
         Ok(result) => println!("{}", result),
         Err(error) => match error {
             BanjoError::CompileError(e) => {
@@ -50,6 +55,12 @@ fn run_file(vm: &mut Vm, path: &str) {
             }
         },
     }
+}
+
+fn interpret(vm: &mut Vm, source: &str) -> Result<Value> {
+    let parser = Parser::new(source);
+    let ast = parser.parse()?;
+    vm.interpret(&ast)
 }
 
 fn main() {

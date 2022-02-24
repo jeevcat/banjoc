@@ -7,17 +7,15 @@ use crate::{
     gc::{Gc, GcRef},
     obj::Function,
     op_code::{Constant, OpCode},
-    parser::{Ast, Node, NodeId, NodeType, Parser},
+    parser::{Ast, Node, NodeId, NodeType},
     scanner::{Token, TokenType},
     value::Value,
 };
 
-pub fn compile(source: &str, vm: &mut Gc) -> Result<GcRef<Function>> {
-    let parser = Parser::new(source);
-    let ast = parser.parse()?;
+pub fn compile(ast: &Ast, vm: &mut Gc) -> Result<GcRef<Function>> {
     let mut compiler = Compiler::new(vm);
 
-    compiler.compile(&ast)?;
+    compiler.compile(ast)?;
 
     let function = compiler.pop_func_compiler().function;
 

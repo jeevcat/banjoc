@@ -10,6 +10,7 @@ use crate::{
     gc::{GarbageCollect, Gc, GcRef},
     obj::{BanjoString, Function, NativeFn, NativeFunction},
     op_code::{Constant, LocalIndex, OpCode},
+    parser::Ast,
     stack::Stack,
     table::Table,
     value::Value,
@@ -69,8 +70,8 @@ impl Vm {
         vm
     }
 
-    pub fn interpret(&mut self, source: &str) -> Result<Value> {
-        let function = compiler::compile(source, &mut self.gc)?;
+    pub fn interpret(&mut self, ast: &Ast) -> Result<Value> {
+        let function = compiler::compile(ast, &mut self.gc)?;
         // Leave the <script> function on the stack forever so it's not GC'd
         self.stack.push(Value::Function(function));
 

@@ -36,6 +36,14 @@ impl<'source> Ast<'source> {
         })
     }
 
+    pub fn insert_node(&mut self, node: Node<'source>) -> &mut Node<'source> {
+        if let NodeType::Return { .. } = node.node_type {
+            self.return_node = Some(node.node_id.lexeme)
+        }
+
+        self.all_nodes.entry(node.node_id.lexeme).or_insert(node)
+    }
+
     fn ensure_node(
         &mut self,
         node_id: Token<'source>,
@@ -89,20 +97,20 @@ impl<'source> Ast<'source> {
                     }
                 }
             }
-            return node;
+            node
+        } else {
+            self.insert_node(Node {
+                node_id,
+                node_type: NodeType::new(node_id, attributes.as_ref()),
+                attributes: attributes.unwrap_or_default(),
+            })
         }
+    }
+}
 
-        let node_type = NodeType::new(node_id, attributes.as_ref());
-        if let NodeType::Return { .. } = node_type {
-            self.return_node = Some(node_id.lexeme)
-        }
-        let node = Node {
-            node_id,
-            node_type,
-            attributes: attributes.unwrap_or_default(),
-        };
-        self.all_nodes.insert(node_id.lexeme, node);
-        self.all_nodes.get_mut(node_id.lexeme).unwrap()
+impl<'source> Default for Ast<'source> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
