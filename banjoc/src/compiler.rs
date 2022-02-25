@@ -11,38 +11,31 @@ use crate::{
     value::Value,
 };
 
-pub fn compile(ast: &Ast, gc: &mut Gc) -> Result<GcRef<Function>> {
-    let mut compiler = Compiler::new(ast, gc);
-
-    compiler.compile()?;
-
-    let function = compiler.pop_func_compiler().function;
-
-    Ok(gc.alloc(function))
-}
-
-struct Compiler<'source> {
+pub struct Compiler<'source> {
     // TODO: this should be an option
     compiler: Box<FuncCompiler<'source>>,
     gc: &'source mut Gc,
     ast: &'source Ast<'source>,
+    /// IDs of nodes in order of compilation
+    pub output_nodes: Vec<NodeId<'source>>,
 }
 
 impl<'source> Compiler<'source> {
-    fn new(ast: &'source Ast, gc: &'source mut Gc) -> Compiler<'source> {
+    pub fn new(ast: &'source Ast, gc: &'source mut Gc) -> Compiler<'source> {
         Self {
             compiler: Box::new(FuncCompiler::new(None)),
             gc,
             ast,
+            output_nodes: vec![],
         }
     }
 
-    fn compile(&mut self) -> Result<()> {
-        let mut result = Ok(());
+    pub fn compile(&mut self) -> Result<GcRef<Function>> {
+        let mut errors = Ok(());
         self.begin_scope();
         for node in self.ast.get_definitions() {
             if let Err(e) = self.node(node) {
-                append(&mut result, e);
+                append(&mut errors, e);
             }
         }
 
@@ -51,11 +44,15 @@ impl<'source> Compiler<'source> {
             .get_return_node()
             .ok_or_else(|| BanjoError::compile("No return node."))?;
         if let Err(e) = self.node(return_node) {
-            append(&mut result, e);
+            append(&mut errors, e);
         }
         self.end_scope();
 
-        result
+        errors?;
+
+        let function = self.pop_func_compiler().function;
+
+        Ok(self.gc.alloc(function))
     }
 
     fn node(&mut self, node: &'source Node<'source>) -> Result<()> {
@@ -93,7 +90,7 @@ impl<'source> Compiler<'source> {
             NodeType::VariableReference { value } => self.named_variable(value)?,
             NodeType::FunctionCall { arguments, value } => {
                 self.named_variable(value)?;
-                self.call(arguments)?;
+                self.call(node.id, arguments)?;
             }
             NodeType::Return { arguments } => {
                 if arguments.len() != 1 {
@@ -104,8 +101,10 @@ impl<'source> Compiler<'source> {
                 } else {
                     self.emit(OpCode::Nil);
                 }
+                self.output_nodes.push(node.id);
                 self.emit(OpCode::Return);
             }
+
             NodeType::Unary {
                 arguments,
                 unary_type,
@@ -230,11 +229,12 @@ impl<'source> Compiler<'source> {
         Ok(())
     }
 
-    fn call(&mut self, arguments: &[NodeId<'source>]) -> Result<()> {
+    fn call(&mut self, fn_node: NodeId<'source>, arguments: &[NodeId<'source>]) -> Result<()> {
         for arg in arguments {
             let arg = self.ast.get_node(arg).unwrap();
             self.node(arg)?;
         }
+        self.output_nodes.push(fn_node);
         self.emit(OpCode::Call {
             arg_count: arguments.len() as u8,
         });

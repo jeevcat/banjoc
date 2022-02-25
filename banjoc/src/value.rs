@@ -3,6 +3,8 @@ use std::{
     fmt::{Debug, Display, Formatter},
 };
 
+use serde::{Serialize, Serializer};
+
 use crate::{
     error::{BanjoError, Result},
     gc::{GarbageCollect, Gc, GcRef},
@@ -101,6 +103,21 @@ impl GarbageCollect for Value {
             Value::NativeFunction(x) => x.mark_gray(gc),
             Value::Function(x) => x.mark_gray(gc),
             _ => {}
+        }
+    }
+}
+
+impl Serialize for Value {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Value::Bool(b) => serializer.serialize_bool(*b),
+            Value::Nil => serializer.serialize_none(),
+            Value::Number(n) => serializer.serialize_f64(*n),
+            Value::String(s) => serializer.serialize_str(s.as_str()),
+            _ => serializer.serialize_str(&format!("{self}")),
         }
     }
 }

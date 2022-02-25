@@ -7,8 +7,7 @@ use std::{
 use banjoc::{
     ast::Ast,
     error::{BanjoError, Result},
-    value::Value,
-    vm::Vm,
+    vm::{NodeOutputs, Vm},
 };
 
 fn repl(vm: &mut Vm) {
@@ -23,7 +22,7 @@ fn repl(vm: &mut Vm) {
             break;
         }
         if let Ok(result) = interpret(vm, &line) {
-            println!("{}", result);
+            println!("{:?}", result);
         }
     }
 }
@@ -37,7 +36,7 @@ fn run_file(vm: &mut Vm, path: &str) {
         }
     };
     match interpret(vm, &source) {
-        Ok(result) => println!("{}", result),
+        Ok(result) => println!("{:?}", result),
         Err(error) => match error {
             BanjoError::CompileError(e) => {
                 eprint!("{e}");
@@ -57,9 +56,9 @@ fn run_file(vm: &mut Vm, path: &str) {
     }
 }
 
-fn interpret(vm: &mut Vm, source: &str) -> Result<Value> {
+fn interpret(vm: &mut Vm, source: &str) -> Result<NodeOutputs> {
     let ast = Ast::new(source)?;
-    vm.interpret(&ast)
+    vm.interpret(ast)
 }
 
 fn main() {

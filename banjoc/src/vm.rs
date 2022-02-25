@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     fmt::Display,
     ptr::null,
     time::{SystemTime, UNIX_EPOCH},
@@ -6,7 +7,7 @@ use std::{
 
 use crate::{
     ast::Ast,
-    compiler,
+    compiler::Compiler,
     error::{BanjoError, Result},
     gc::{GarbageCollect, Gc, GcRef},
     obj::{BanjoString, Function, NativeFn, NativeFunction},
@@ -16,9 +17,13 @@ use crate::{
     value::Value,
 };
 
+pub type NodeOutputs = HashMap<String, Value>;
+
 pub type ValueStack = Stack<Value, { Vm::STACK_MAX }>;
 pub struct Vm {
     pub gc: Gc,
+    /// Output values of nodes in order of execution. Indices correspond with `Compiler::output_nodes`.
+    pub output_values: Vec<Value>,
     stack: ValueStack,
     frames: Stack<CallFrame, { Vm::FRAMES_MAX }>,
     globals: Table,
@@ -37,6 +42,7 @@ impl Vm {
             stack: Stack::new(),
             frames: Stack::new(),
             globals: Table::new(),
+            output_values: vec![],
         };
 
         vm.define_native("clock", |_, _| {
@@ -76,14 +82,32 @@ impl Vm {
     /// # Errors
     ///
     /// This function can return both compile and runtime errors.
-    pub fn interpret(&mut self, ast: &Ast) -> Result<Value> {
-        let function = compiler::compile(ast, &mut self.gc)?;
+    pub fn interpret(&mut self, ast: Ast) -> Result<NodeOutputs> {
+        let mut compiler: Compiler = Compiler::new(&ast, &mut self.gc);
+        let function = compiler.compile()?;
+
+        // TODO surely I can avoid this somehow, but it hurts my head :(
+        let output_nodes: Vec<String> = compiler
+            .output_nodes
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+
         // Leave the <script> function on the stack forever so it's not GC'd
         self.stack.push(Value::Function(function));
 
         self.call(function, 0)?;
 
-        self.run()
+        // TODO remove return
+        self.run()?;
+
+        let output_values = std::mem::take(&mut self.output_values);
+        assert_eq!(output_nodes.len(), output_values.len());
+        let outputs: NodeOutputs = output_nodes
+            .into_iter()
+            .zip(output_values.into_iter())
+            .collect();
+        Ok(outputs)
     }
 
     // Returning an error from this function (including ?) halts execution
@@ -122,6 +146,7 @@ impl Vm {
                 }
                 OpCode::Return => {
                     let result = self.stack.pop();
+                    self.output_values.push(result);
                     let fun_stack_start = self.frames.pop().slot;
                     if self.frames.len() == 0 {
                         // Exit interpreter
@@ -204,6 +229,7 @@ impl Vm {
             Value::NativeFunction(callee) => {
                 let args = self.stack.pop_n(arg_count);
                 let result = (callee.function)(args, self)?;
+                self.output_values.push(result);
                 self.stack.pop();
                 self.stack.push(result);
                 Ok(())
