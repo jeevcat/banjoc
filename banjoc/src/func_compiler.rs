@@ -1,9 +1,9 @@
 use crate::{
+    ast::NodeId,
     error::{BanjoError, Result},
     gc::GcRef,
     obj::{BanjoString, Function},
     op_code::LocalIndex,
-    scanner::Token,
 };
 
 /// A compiler for a graph, including the implicit top-level function, <script>
@@ -24,9 +24,8 @@ impl<'source> FuncCompiler<'source> {
     pub fn new(function_name: Option<GcRef<BanjoString>>) -> Self {
         let mut locals = Vec::with_capacity(Self::MAX_LOCAL_COUNT);
         // Claim stack slot zero for the VM's own internal use
-        let name = Token::none();
         locals.push(Local {
-            name,
+            id: "",
             depth: Some(0),
         });
 
@@ -46,15 +45,13 @@ impl<'source> FuncCompiler<'source> {
         self.scope_depth -= 1;
     }
 
-    pub fn add_local(&mut self, name: Token<'source>) -> Result<()> {
+    pub fn add_local(&mut self, id: NodeId<'source>) -> Result<()> {
         if self.locals.len() == Self::MAX_LOCAL_COUNT {
-            return Err(BanjoError::CompileError(
-                "Too many local variables in function.",
-            ));
+            return BanjoError::compile_err("Too many local variables in function.");
         }
 
         // Only "declare" for now, by assigning sentinel value
-        self.locals.push(Local { name, depth: None });
+        self.locals.push(Local { id, depth: None });
 
         Ok(())
     }
@@ -73,15 +70,13 @@ impl<'source> FuncCompiler<'source> {
         self.locals.pop();
     }
 
-    pub fn resolve_local(&mut self, name: Token) -> Result<Option<LocalIndex>> {
+    pub fn resolve_local(&mut self, id: NodeId) -> Result<Option<LocalIndex>> {
         for (i, local) in self.locals.iter().enumerate().rev() {
-            if name.lexeme == local.name.lexeme {
+            if id == local.id {
                 return if local.is_initialized() {
                     Ok(Some(i as u8))
                 } else {
-                    Err(BanjoError::CompileError(
-                        "Can't read local variable in its own initializer.",
-                    ))
+                    BanjoError::compile_err("Can't read local variable in its own initializer.")
                 };
             }
         }
@@ -102,7 +97,7 @@ impl<'source> FuncCompiler<'source> {
         }
     }
 
-    pub fn is_local_already_in_scope(&self, name: Token) -> bool {
+    pub fn is_local_already_in_scope(&self, id: NodeId) -> bool {
         // Search for a variable with the same name in the current scope
         for local in self.locals.iter().rev() {
             if let Some(depth) = local.depth {
@@ -111,7 +106,7 @@ impl<'source> FuncCompiler<'source> {
                 }
             }
 
-            if name.lexeme == local.name.lexeme {
+            if id == local.id {
                 return true;
             }
         }
@@ -122,9 +117,7 @@ impl<'source> FuncCompiler<'source> {
         self.function.arity += 1;
 
         if self.function.arity > 255 {
-            Err(BanjoError::CompileError(
-                "Can't have more than 255 parameters.",
-            ))
+            BanjoError::compile_err("Can't have more than 255 parameters.")
         } else {
             Ok(())
         }
@@ -132,7 +125,7 @@ impl<'source> FuncCompiler<'source> {
 }
 
 pub struct Local<'source> {
-    name: Token<'source>,
+    id: NodeId<'source>,
     /// The scope depth of the block where the local variable was declared
     /// None means declared but not defined
     depth: Option<u32>,

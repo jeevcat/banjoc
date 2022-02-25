@@ -5,8 +5,8 @@ use std::{
 };
 
 use banjoc::{
+    ast::Ast,
     error::{BanjoError, Result},
-    parser::Parser,
     value::Value,
     vm::Vm,
 };
@@ -58,8 +58,7 @@ fn run_file(vm: &mut Vm, path: &str) {
 }
 
 fn interpret(vm: &mut Vm, source: &str) -> Result<Value> {
-    let parser = Parser::new(source);
-    let ast = parser.parse()?;
+    let ast = Ast::new(source)?;
     vm.interpret(&ast)
 }
 
