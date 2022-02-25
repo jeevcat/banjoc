@@ -60,13 +60,13 @@ impl<'source> Compiler<'source> {
 
     fn node(&mut self, node: &'source Node<'source>) -> Result<()> {
         match &node.node_type {
-            NodeType::Literal(value) => self.literal(value)?,
+            NodeType::Literal { value } => self.literal(value)?,
             NodeType::FunctionDefinition { arguments, .. } => {
                 if arguments.len() != 1 {
                     return BanjoError::compile_err("Function definition has invalid input.");
                 }
                 if let Some(body_node) = self.ast.get_node(arguments[0]) {
-                    self.fun_declaration(body_node, node.id())?
+                    self.fun_declaration(body_node, node.id)?
                 } else {
                     return BanjoError::compile_err("Function definition has no input.");
                 }

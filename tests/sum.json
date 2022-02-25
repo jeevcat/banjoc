@@ -3,12 +3,12 @@
     {
       "id": "return",
       "type": "return",
-      "arguments": []
+      "arguments": ["sum"]
     },
     {
       "id": "sum",
       "type": "call",
-      "name": "sum",
+      "value": "sum",
       "arguments": ["a", "b"]
     },
     {

@@ -42,15 +42,11 @@ impl<'source> Ast<'source> {
 }
 
 #[derive(Deserialize, Debug)]
-struct BaseNode<'source> {
-    id: NodeId<'source>,
-    comment: Option<&'source str>,
-}
-
-#[derive(Deserialize, Debug)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum NodeType<'source> {
-    Literal(LiteralType<'source>),
+    Literal {
+        value: LiteralType<'source>,
+    },
     #[serde(alias = "call")]
     FunctionCall {
         value: NodeId<'source>,
@@ -125,16 +121,9 @@ pub enum BinaryType {
 
 #[derive(Deserialize, Debug)]
 pub struct Node<'source> {
-    #[serde(borrow, flatten)]
-    base: BaseNode<'source>,
+    pub id: NodeId<'source>,
     #[serde(borrow, flatten)]
     pub node_type: NodeType<'source>,
-}
-
-impl<'source> Node<'source> {
-    pub fn id(&self) -> NodeId<'source> {
-        self.base.id
-    }
 }
 
 fn deserialize_nodes<'de: 'source, 'source, D>(
@@ -145,7 +134,7 @@ where
 {
     let mut map = HashMap::new();
     for item in Vec::<Node>::deserialize(deserializer)? {
-        map.insert(item.base.id, item);
+        map.insert(item.id, item);
     }
     Ok(map)
 }

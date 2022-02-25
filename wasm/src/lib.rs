@@ -1,6 +1,6 @@
 mod utils;
 
-use banjoc::{error::BanjoError, parser::Parser, value::Value, vm::Vm};
+use banjoc::{ast::Ast, error::BanjoError, value::Value, vm::Vm};
 use utils::set_panic_hook;
 use wasm_bindgen::prelude::*;
 
@@ -35,7 +35,6 @@ pub fn interpret(source: &str) -> Result<JsValue, JsValue> {
 
 fn parse_interpret(source: &str) -> Result<Value, BanjoError> {
     let mut vm = Vm::new();
-    let parser = Parser::new(source);
-    let ast = parser.parse()?;
+    let ast = Ast::new(source)?;
     vm.interpret(&ast)
 }
