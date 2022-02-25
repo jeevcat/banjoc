@@ -2,8 +2,6 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Deserializer};
 
-use crate::error::BanjoError;
-
 pub type NodeId<'source> = &'source str;
 
 #[derive(Deserialize, Debug)]
@@ -13,14 +11,6 @@ pub struct Ast<'source> {
 }
 
 impl<'source> Ast<'source> {
-    /// # Errors
-    ///
-    /// This function will return an error if JSON is malformed.
-    pub fn new(source: &'source str) -> Result<Self, BanjoError> {
-        serde_json::from_str(source)
-            .map_err(|e| BanjoError::compile(&format!("JSON parsing error: {e}")))
-    }
-
     #[must_use]
     pub fn get_node(&self, node_id: NodeId) -> Option<&Node> {
         self.nodes.get(node_id)
@@ -142,41 +132,4 @@ where
         map.insert(item.id, item);
     }
     Ok(map)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_name() {
-        let j = r#"
-        {
-            "nodes": [
-              {
-                "id": "return",
-                "type": "return",
-                "arguments": []
-              },
-              {
-                "id": "sum",
-                "type": "call",
-                "name": "sum",
-                "arguments": ["a", "b"]
-              },
-              {
-                "id": "a",
-                "type": "literal",
-                "value": 1
-              },
-              {
-                "id": "b",
-                "type": "literal",
-                "value": 2
-              }
-            ]
-          }
-        "#;
-        println!("{:#?}", serde_json::from_str::<Ast>(j).unwrap());
-    }
 }

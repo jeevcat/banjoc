@@ -4,6 +4,8 @@ use std::{
     process,
 };
 
+use serde_json::from_str;
+
 use banjoc::{
     ast::Ast,
     error::{BanjoError, Result},
@@ -57,7 +59,8 @@ fn run_file(vm: &mut Vm, path: &str) {
 }
 
 fn interpret(vm: &mut Vm, source: &str) -> Result<NodeOutputs> {
-    let ast = Ast::new(source)?;
+    let ast: Ast =
+        from_str(source).map_err(|e| BanjoError::compile(&format!("JSON parsing error: {e}")))?;
     vm.interpret(ast)
 }
 
@@ -71,5 +74,42 @@ fn main() {
             eprintln!("Usage: banjo [path]");
             process::exit(64);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_name() {
+        let j = r#"
+        {
+            "nodes": [
+              {
+                "id": "return",
+                "type": "return",
+                "arguments": []
+              },
+              {
+                "id": "sum",
+                "type": "call",
+                "name": "sum",
+                "arguments": ["a", "b"]
+              },
+              {
+                "id": "a",
+                "type": "literal",
+                "value": 1
+              },
+              {
+                "id": "b",
+                "type": "literal",
+                "value": 2
+              }
+            ]
+          }
+        "#;
+        println!("{:#?}", serde_json::from_str::<Ast>(j).unwrap());
     }
 }

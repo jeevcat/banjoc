@@ -4,7 +4,6 @@
 mod utils;
 
 use banjoc::{
-    ast::Ast,
     error::BanjoError,
     vm::{NodeOutputs, Vm},
 };
@@ -18,7 +17,7 @@ use wasm_bindgen::prelude::*;
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 #[wasm_bindgen(catch)]
-pub fn interpret(source: &str) -> JsValue {
+pub fn interpret(source: JsValue) -> JsValue {
     set_panic_hook();
     match parse_interpret(source) {
         Err(e) => match e {
@@ -28,12 +27,13 @@ pub fn interpret(source: &str) -> JsValue {
             }
             BanjoError::RuntimeError(msg) => JsValue::from_str(&format!("runtime error: {msg}")),
         },
-        Ok(value) => JsValue::from_serde(&value).unwrap(),
+        Ok(value) => serde_wasm_bindgen::to_value(&value).unwrap(),
     }
 }
 
-fn parse_interpret(source: &str) -> Result<NodeOutputs, BanjoError> {
+fn parse_interpret(source: JsValue) -> Result<NodeOutputs, BanjoError> {
     let mut vm = Vm::new();
-    let ast = Ast::new(source)?;
+    let ast = serde_wasm_bindgen::from_value(source)
+        .map_err(|e| BanjoError::compile(&format!("JSON parsing error: {e}")))?;
     vm.interpret(ast)
 }
