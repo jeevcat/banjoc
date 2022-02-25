@@ -6,12 +6,10 @@ mod func_compiler;
 mod gc;
 mod obj;
 mod op_code;
-mod scanner;
 mod stack;
 mod table;
 
 pub mod ast;
 pub mod error;
-pub mod parser;
 pub mod value;
 pub mod vm;
