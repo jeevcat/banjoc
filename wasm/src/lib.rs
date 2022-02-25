@@ -1,3 +1,6 @@
+// https://github.com/rustwasm/wasm-bindgen/issues/2774
+#![allow(clippy::unused_unit)]
+
 mod utils;
 
 use banjoc::{ast::Ast, error::BanjoError, value::Value, vm::Vm};

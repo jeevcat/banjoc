@@ -1,15 +1,15 @@
 {
   "nodes": [
     {
+      "arguments": ["sum"],
       "id": "return",
-      "type": "return",
-      "arguments": ["sum"]
+      "type": "return"
     },
     {
+      "arguments": ["a", "b"],
       "id": "sum",
       "type": "call",
-      "value": "sum",
-      "arguments": ["a", "b"]
+      "value": "sum"
     },
     {
       "id": "a",
