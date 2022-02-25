@@ -13,7 +13,7 @@ use crate::{
 
 struct HeaderPtr(NonNull<ObjHeader>);
 impl HeaderPtr {
-    fn size_of_val(&self) -> usize {
+    fn size_of_val(self) -> usize {
         match self.obj_type {
             ObjectType::String => mem::size_of::<BanjoString>(),
             ObjectType::NativeFunction => mem::size_of::<NativeFunction>(),
@@ -21,7 +21,7 @@ impl HeaderPtr {
         }
     }
 
-    fn transmute<T>(&self) -> GcRef<T> {
+    fn transmute<T>(self) -> GcRef<T> {
         unsafe { mem::transmute(self.0.as_ref()) }
     }
 
@@ -80,7 +80,7 @@ impl<T: Display> GcRef<T> {
         }
     }
 
-    pub fn is_marked(&self) -> bool {
+    pub fn is_marked(self) -> bool {
         self.header().is_marked
     }
 
@@ -92,12 +92,12 @@ impl<T: Display> GcRef<T> {
         unsafe { std::ptr::drop_in_place(self.pointer.as_ptr()) }
     }
 
-    fn header(&self) -> HeaderPtr {
-        unsafe { mem::transmute(self.deref()) }
+    fn header(self) -> HeaderPtr {
+        unsafe { mem::transmute(&*self) }
     }
 
-    fn size_of_val(&self) -> usize {
-        mem::size_of_val(self.deref())
+    fn size_of_val(self) -> usize {
+        mem::size_of_val(&*self)
     }
 }
 
@@ -285,10 +285,7 @@ impl Gc {
 
         // Mark all outgoing references
         match obj.obj_type {
-            ObjectType::String => {
-                // No outgoing references
-            }
-            ObjectType::NativeFunction => {
+            ObjectType::String | ObjectType::NativeFunction => {
                 // No outgoing references
             }
             ObjectType::Function => {

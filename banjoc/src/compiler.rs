@@ -66,7 +66,7 @@ impl<'source> Compiler<'source> {
                     return BanjoError::compile_err("Function definition has invalid input.");
                 }
                 if let Some(body_node) = self.ast.get_node(arguments[0]) {
-                    self.fun_declaration(body_node, node.id)?
+                    self.fun_declaration(body_node, node.id)?;
                 } else {
                     return BanjoError::compile_err("Function definition has no input.");
                 }
@@ -76,7 +76,7 @@ impl<'source> Compiler<'source> {
                     return BanjoError::compile_err("Variable definition has invalid input.");
                 }
                 if let Some(body_node) = self.ast.get_node(arguments[0]) {
-                    self.var_declaration(body_node, name)?
+                    self.var_declaration(body_node, name)?;
                 } else {
                     return BanjoError::compile_err("Variable definition has no input.");
                 }
@@ -134,7 +134,7 @@ impl<'source> Compiler<'source> {
                         return BanjoError::compile_err("Binary is missing an input.");
                     }
                 }
-                self.emit_binary(binary_type)
+                self.emit_binary(binary_type);
             }
         }
         Ok(())
@@ -178,7 +178,7 @@ impl<'source> Compiler<'source> {
             LiteralType::Number(n) => self.emit_constant(Value::Number(n))?,
             LiteralType::String(s) => {
                 let value = Value::String(self.gc.intern(s));
-                self.emit_constant(value)?
+                self.emit_constant(value)?;
             }
         }
         Ok(())
@@ -279,7 +279,7 @@ impl<'source> Compiler<'source> {
 
     fn define_variable(&mut self, global: Option<Constant>) {
         if let Some(global) = global {
-            self.emit(OpCode::DefineGlobal(global))
+            self.emit(OpCode::DefineGlobal(global));
         } else {
             // For local variables, we just save references to values on the stack. No need
             // to store them somewhere else like globals do.
@@ -310,8 +310,7 @@ impl<'source> Compiler<'source> {
                 .compiler
                 .function
                 .name
-                .map(|ls| ls.as_str().to_string())
-                .unwrap_or_else(|| "<script>".to_string());
+                .map_or_else(|| "<script>".to_string(), |ls| ls.as_str().to_string());
 
             crate::disassembler::disassemble(&self.compiler.function.chunk, &name);
         }
@@ -340,7 +339,7 @@ impl<'source> Compiler<'source> {
     }
 
     fn emit(&mut self, opcode: OpCode) {
-        self.current_chunk().write(opcode)
+        self.current_chunk().write(opcode);
     }
 
     fn emit_constant(&mut self, value: Value) -> Result<()> {

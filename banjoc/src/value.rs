@@ -1,7 +1,6 @@
 use std::{
     fmt,
     fmt::{Debug, Display, Formatter},
-    ops::Deref,
 };
 
 use crate::{
@@ -23,6 +22,7 @@ pub enum Value {
 }
 
 impl Value {
+    #[must_use]
     pub fn is_falsey(&self) -> bool {
         match self {
             Value::Bool(b) => !b,
@@ -75,9 +75,9 @@ impl Display for Value {
             Value::Bool(x) => Display::fmt(&x, f),
             Value::Nil => f.write_str("nil"),
             Value::Number(x) => Display::fmt(&x, f),
-            Value::String(x) => Display::fmt(x.deref(), f),
-            Value::NativeFunction(x) => Display::fmt(x.deref(), f),
-            Value::Function(x) => Display::fmt(x.deref(), f),
+            Value::String(x) => Display::fmt(&**x, f),
+            Value::NativeFunction(x) => Display::fmt(&**x, f),
+            Value::Function(x) => Display::fmt(&**x, f),
         }
     }
 }

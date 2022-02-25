@@ -44,10 +44,10 @@ impl Display for BanjoString {
 
 pub fn hash_string(string: &str) -> u32 {
     // FNV-1a
-    let mut hash = 2166136261u32;
+    let mut hash = 2_166_136_261_u32;
     for c in string.bytes() {
-        hash ^= c as u32;
-        hash = hash.wrapping_mul(16777619u32);
+        hash ^= u32::from(c);
+        hash = hash.wrapping_mul(16_777_619_u32);
     }
     hash
 }

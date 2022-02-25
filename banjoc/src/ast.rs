@@ -13,15 +13,20 @@ pub struct Ast<'source> {
 }
 
 impl<'source> Ast<'source> {
+    /// # Errors
+    ///
+    /// This function will return an error if JSON is malformed.
     pub fn new(source: &'source str) -> Result<Self, BanjoError> {
         serde_json::from_str(source)
             .map_err(|e| BanjoError::compile(&format!("JSON parsing error: {e}")))
     }
 
+    #[must_use]
     pub fn get_node(&self, node_id: NodeId) -> Option<&Node> {
         self.nodes.get(node_id)
     }
 
+    #[must_use]
     pub fn get_return_node(&self) -> Option<&Node> {
         // TODO perf
         self.nodes

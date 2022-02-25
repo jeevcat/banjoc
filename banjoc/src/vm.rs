@@ -28,6 +28,7 @@ impl Vm {
     const FRAMES_MAX: usize = 64;
     const STACK_MAX: usize = Self::FRAMES_MAX * (u8::MAX as usize + 1);
 
+    #[must_use]
     pub fn new() -> Vm {
         let gc = Gc::new();
 
@@ -42,13 +43,13 @@ impl Vm {
             Ok(Value::Number(
                 SystemTime::now()
                     .duration_since(UNIX_EPOCH)
-                    .unwrap()
+                    .map_err(|e| BanjoError::RuntimeError(e.to_string()))?
                     .as_secs_f64(),
             ))
         });
         vm.define_native("sum", |args, vm| {
             args.iter()
-                .cloned()
+                .copied()
                 .reduce(|accum, item| accum.add(item, vm).unwrap_or(accum))
                 .ok_or_else(|| {
                     BanjoError::RuntimeError("Expected at least 1 argument.".to_string())
@@ -56,7 +57,7 @@ impl Vm {
         });
         vm.define_native("product", |args, _| {
             args.iter()
-                .cloned()
+                .copied()
                 .reduce(|accum, item| {
                     accum
                         .binary_op(item, |a, b| Value::Number(a * b))
@@ -70,6 +71,11 @@ impl Vm {
         vm
     }
 
+    /// Compile then execute the given AST using this VM.
+    ///
+    /// # Errors
+    ///
+    /// This function can return both compile and runtime errors.
     pub fn interpret(&mut self, ast: &Ast) -> Result<Value> {
         let function = compiler::compile(ast, &mut self.gc)?;
         // Leave the <script> function on the stack forever so it's not GC'd
@@ -100,7 +106,7 @@ impl Vm {
                     let result = a.add(b, self)?;
                     self.stack.push(result);
                 }
-                OpCode::Constant(constant) => {
+                OpCode::Constant(constant) | OpCode::Function(constant) => {
                     let constant = self.current_frame().read_constant(constant);
                     self.stack.push(constant);
                 }
@@ -135,7 +141,7 @@ impl Vm {
                 OpCode::Equal => {
                     let a = self.stack.pop();
                     let b = self.stack.pop();
-                    self.stack.push(Value::Bool(a == b))
+                    self.stack.push(Value::Bool(a == b));
                 }
                 OpCode::Greater => self.binary_op(|a, b| Value::Bool(a > b))?,
                 OpCode::Less => self.binary_op(|a, b| Value::Bool(a < b))?,
@@ -152,7 +158,7 @@ impl Vm {
                     if let Some(value) = self.globals.get(name) {
                         self.stack.push(value);
                     } else {
-                        self.runtime_error(&format!("Undefined variable '{}'.", name.as_str()))?
+                        self.runtime_error(&format!("Undefined variable '{}'.", name.as_str()))?;
                     }
                 }
                 OpCode::GetLocal(offset) => {
@@ -162,11 +168,6 @@ impl Vm {
                 OpCode::Call { arg_count } => {
                     let arg_count = arg_count as usize;
                     self.call_value(*self.stack.peek(arg_count), arg_count)?;
-                }
-                OpCode::Function(constant) => {
-                    // Load the compiled function from the constant table
-                    let function = self.current_frame().read_constant(constant);
-                    self.stack.push(function);
                 }
             }
         }
@@ -332,6 +333,6 @@ impl CallFrame {
 
 impl GarbageCollect for CallFrame {
     fn mark_gray(&mut self, gc: &mut Gc) {
-        self.function.mark_gray(gc)
+        self.function.mark_gray(gc);
     }
 }

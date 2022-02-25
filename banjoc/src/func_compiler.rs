@@ -137,6 +137,6 @@ impl<'source> Local<'source> {
     }
 
     fn mark_initialized(&mut self, depth: u32) {
-        self.depth = Some(depth)
+        self.depth = Some(depth);
     }
 }

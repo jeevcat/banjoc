@@ -17,20 +17,20 @@ impl BanjoError {
         match self {
             BanjoError::CompileError(this) => match other {
                 BanjoError::CompileError(other) => {
-                    *self = Self::CompileErrors(vec![this.to_string(), other])
+                    *self = Self::CompileErrors(vec![(*this).to_string(), other]);
                 }
                 BanjoError::CompileErrors(mut other) => {
-                    other.push(this.to_string());
-                    *self = Self::CompileErrors(other)
+                    other.push((*this).to_string());
+                    *self = Self::CompileErrors(other);
                 }
-                _ => {}
+                BanjoError::RuntimeError(_) => {}
             },
             BanjoError::CompileErrors(this) => match other {
                 BanjoError::CompileError(other) => this.push(other),
                 BanjoError::CompileErrors(mut other) => this.append(&mut other),
-                _ => {}
+                BanjoError::RuntimeError(_) => {}
             },
-            _ => {}
+            BanjoError::RuntimeError(_) => {}
         }
     }
 }

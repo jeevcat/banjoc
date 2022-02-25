@@ -13,7 +13,7 @@ struct Entry {
     value: Value,
 }
 
-/// A hashmap with key: BanjoString and val: Value
+/// A hashmap with key: `BanjoString` and val: Value
 pub struct Table {
     // Number of populated entries plus tombstones
     count: usize,
@@ -222,7 +222,7 @@ impl GarbageCollect for Table {
         for entry in &mut self.entries {
             if let Some(mut key) = entry.key {
                 key.mark_gray(gc);
-                entry.value.mark_gray(gc)
+                entry.value.mark_gray(gc);
             }
         }
     }
@@ -237,7 +237,7 @@ mod tests {
     #[test]
     fn insertion() {
         // Generate some strings
-        let mut strings: Vec<_> = (0..100000)
+        let mut strings: Vec<_> = (0..100_000)
             .map(|n| BanjoString::new(n.to_string()))
             .collect();
 
@@ -248,7 +248,7 @@ mod tests {
         let mut t = Table::new();
         let mut count = 0;
         for key in &refs {
-            let num = str_to_num(*key) as f64;
+            let num = f64::from(str_to_num(*key));
             t.insert(*key, Value::Number(num));
             count += 1;
             assert_eq!(t.count, count);
@@ -272,7 +272,7 @@ mod tests {
         // Insert into Table
         let mut t = Table::new();
         for key in &refs {
-            let num = str_to_num(*key) as f64;
+            let num = f64::from(str_to_num(*key));
             t.insert(*key, Value::Number(num));
         }
 
