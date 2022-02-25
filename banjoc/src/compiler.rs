@@ -1,7 +1,7 @@
 use std::mem::{self};
 
 use crate::{
-    ast::{Ast, Node, NodeId, NodeType},
+    ast::{Ast, BinaryType, LiteralType, Node, NodeId, NodeType, UnaryType},
     chunk::Chunk,
     error::{append, BanjoError, Result},
     func_compiler::FuncCompiler,
@@ -49,7 +49,7 @@ impl<'source> Compiler<'source> {
         let return_node = self
             .ast
             .get_return_node()
-            .ok_or(BanjoError::CompileError("No return node."))?;
+            .ok_or_else(|| BanjoError::compile("No return node."))?;
         if let Err(e) = self.node(return_node) {
             append(&mut result, e);
         }
@@ -59,40 +59,26 @@ impl<'source> Compiler<'source> {
     }
 
     fn node(&mut self, node: &'source Node<'source>) -> Result<()> {
-        fn get_node<'source>(
-            ast: &'source Ast,
-            node_id: &Option<NodeId>,
-        ) -> Option<&'source Node<'source>> {
-            ast.get_node(node_id.as_ref()?)
-        }
         match &node.node_type {
-            NodeType::Literal { value } => self.literal(value)?,
-            NodeType::FunctionDefinition { arguments, name } => {
+            NodeType::Literal(value) => self.literal(value)?,
+            NodeType::FunctionDefinition { arguments, .. } => {
                 if arguments.len() != 1 {
-                    return Err(BanjoError::CompileError(
-                        "Function definition has invalid input.",
-                    ));
+                    return BanjoError::compile_err("Function definition has invalid input.");
                 }
                 if let Some(body_node) = self.ast.get_node(arguments[0]) {
-                    self.fun_declaration(body_node, name)?
+                    self.fun_declaration(body_node, node.id())?
                 } else {
-                    return Err(BanjoError::CompileError(
-                        "Function definition has no input.",
-                    ));
+                    return BanjoError::compile_err("Function definition has no input.");
                 }
             }
             NodeType::VariableDefinition { arguments, name } => {
                 if arguments.len() != 1 {
-                    return Err(BanjoError::CompileError(
-                        "Variable definition has invalid input.",
-                    ));
+                    return BanjoError::compile_err("Variable definition has invalid input.");
                 }
                 if let Some(body_node) = self.ast.get_node(arguments[0]) {
                     self.var_declaration(body_node, name)?
                 } else {
-                    return Err(BanjoError::CompileError(
-                        "Variable definition has no input.",
-                    ));
+                    return BanjoError::compile_err("Variable definition has no input.");
                 }
             }
             NodeType::Param { name } => {
@@ -104,14 +90,14 @@ impl<'source> Compiler<'source> {
                 }
                 self.named_variable(name)?;
             }
-            NodeType::VariableReference { name } => self.named_variable(name)?,
-            NodeType::FunctionCall { arguments, name } => {
-                self.named_variable(name)?;
+            NodeType::VariableReference { value } => self.named_variable(value)?,
+            NodeType::FunctionCall { arguments, value } => {
+                self.named_variable(value)?;
                 self.call(arguments)?;
             }
             NodeType::Return { arguments } => {
                 if arguments.len() != 1 {
-                    return Err(BanjoError::CompileError("Return has invalid input."));
+                    return BanjoError::compile_err("Return has invalid input.");
                 }
                 if let Some(argument) = self.ast.get_node(arguments[0]) {
                     self.node(argument)?;
@@ -120,94 +106,94 @@ impl<'source> Compiler<'source> {
                 }
                 self.emit(OpCode::Return);
             }
-            NodeType::Unary { argument } => {
-                if let Some(argument) = get_node(self.ast, argument) {
+            NodeType::Unary {
+                arguments,
+                unary_type,
+            } => {
+                if arguments.len() != 1 {
+                    return BanjoError::compile_err("Unary has invalid input.");
+                }
+                if let Some(argument) = self.ast.get_node(arguments[0]) {
                     self.node(argument)?;
-                    self.emit_unary(node.node_id.token_type);
+                    self.emit_unary(unary_type);
                 } else {
-                    return Err(BanjoError::CompileError("Unary has no input."));
+                    return BanjoError::compile_err("Unary has no input.");
                 }
             }
-            NodeType::Binary { term_a, term_b } => {
-                for term in [term_a, term_b] {
-                    if let Some(term) = get_node(self.ast, term) {
+            NodeType::Binary {
+                arguments,
+                binary_type,
+            } => {
+                if arguments.len() != 2 {
+                    return BanjoError::compile_err("Binary has invalid input.");
+                }
+                for term in arguments {
+                    if let Some(term) = self.ast.get_node(term) {
                         self.node(term)?;
                     } else {
-                        return Err(BanjoError::CompileError("Binary is missing an input."));
+                        return BanjoError::compile_err("Binary is missing an input.");
                     }
                 }
-                self.emit_binary(node.node_id.token_type)
+                self.emit_binary(binary_type)
             }
         }
         Ok(())
     }
 
-    fn emit_unary(&mut self, operator_type: TokenType) {
+    fn emit_unary(&mut self, unary_type: &UnaryType) {
         // Emit the operator instruction.
-        match operator_type {
-            TokenType::Negate => self.emit(OpCode::Negate),
-            TokenType::Not => self.emit(OpCode::Not),
-            _ => unreachable!(),
+        match unary_type {
+            UnaryType::Negate => self.emit(OpCode::Negate),
+            UnaryType::Not => self.emit(OpCode::Not),
         }
     }
 
-    fn emit_binary(&mut self, operator_type: TokenType) {
+    fn emit_binary(&mut self, binary_type: &BinaryType) {
         // Compile the operator
-        match operator_type {
-            TokenType::Subtract => self.emit(OpCode::Subtract),
-            TokenType::Divide => self.emit(OpCode::Divide),
-            TokenType::Equals => self.emit(OpCode::Equal),
-            TokenType::Greater => self.emit(OpCode::Greater),
-            TokenType::Less => self.emit(OpCode::Less),
-            TokenType::NotEquals => {
+        match binary_type {
+            BinaryType::Subtract => self.emit(OpCode::Subtract),
+            BinaryType::Divide => self.emit(OpCode::Divide),
+            BinaryType::Equals => self.emit(OpCode::Equal),
+            BinaryType::Greater => self.emit(OpCode::Greater),
+            BinaryType::Less => self.emit(OpCode::Less),
+            BinaryType::NotEquals => {
                 self.emit(OpCode::Equal);
                 self.emit(OpCode::Not);
             }
-            TokenType::GreaterEqual => {
+            BinaryType::GreaterEqual => {
                 self.emit(OpCode::Less);
                 self.emit(OpCode::Not);
             }
-            TokenType::LessEqual => {
+            BinaryType::LessEqual => {
                 self.emit(OpCode::Greater);
                 self.emit(OpCode::Not);
             }
-            _ => unreachable!(),
         }
     }
 
-    fn literal(&mut self, token: Token) -> Result<()> {
-        match token.token_type {
-            TokenType::False => self.emit(OpCode::False),
-            TokenType::Nil => self.emit(OpCode::Nil),
-            TokenType::True => self.emit(OpCode::True),
-            TokenType::Number => self.number(token)?,
-            TokenType::String => self.string(token)?,
-            _ => unreachable!("Trying to make literal from {token:?}"),
+    fn literal(&mut self, value: &LiteralType) -> Result<()> {
+        match *value {
+            LiteralType::Bool(b) => self.emit(if b { OpCode::True } else { OpCode::False }),
+            LiteralType::Nil => self.emit(OpCode::Nil),
+            LiteralType::Number(n) => self.emit_constant(Value::Number(n))?,
+            LiteralType::String(s) => {
+                let value = Value::String(self.gc.intern(s));
+                self.emit_constant(value)?
+            }
         }
         Ok(())
-    }
-
-    fn number(&mut self, token: Token) -> Result<()> {
-        let value: f64 = token.lexeme.parse().unwrap();
-        self.emit_constant(Value::Number(value))
-    }
-
-    fn string(&mut self, token: Token) -> Result<()> {
-        let string = &token.lexeme[1..token.lexeme.len() - 1];
-        let value = Value::String(self.gc.intern(string));
-        self.emit_constant(value)
     }
 
     fn current_chunk(&mut self) -> &mut Chunk {
         &mut self.compiler.function.chunk
     }
 
-    fn named_variable(&mut self, name: Token) -> Result<()> {
+    fn named_variable(&mut self, id: NodeId) -> Result<()> {
         let get_opcode = {
-            if let Some(index) = self.compiler.resolve_local(name)? {
+            if let Some(index) = self.compiler.resolve_local(id)? {
                 OpCode::GetLocal(index)
             } else {
-                let constant = self.identifier_constant(name)?;
+                let constant = self.identifier_constant(id)?;
                 OpCode::GetGlobal(constant)
             }
         };
@@ -219,17 +205,17 @@ impl<'source> Compiler<'source> {
     fn fun_declaration(
         &mut self,
         body_node: &'source Node<'source>,
-        name: Token<'source>,
+        id: NodeId<'source>,
     ) -> Result<()> {
-        let global = self.declare_variable(name);
+        let global = self.declare_variable(id);
         self.compiler.mark_var_initialized();
-        self.function(body_node, name)?;
+        self.function(body_node, id)?;
         self.define_variable(global);
         Ok(())
     }
 
-    fn function(&mut self, body_node: &'source Node<'source>, name: Token<'source>) -> Result<()> {
-        self.push_func_compiler(name.lexeme);
+    fn function(&mut self, body_node: &'source Node<'source>, id: NodeId) -> Result<()> {
+        self.push_func_compiler(id);
         self.begin_scope();
 
         self.node(body_node)?;
@@ -258,9 +244,9 @@ impl<'source> Compiler<'source> {
     fn var_declaration(
         &mut self,
         body_node: &'source Node<'source>,
-        name: Token<'source>,
+        id: NodeId<'source>,
     ) -> Result<()> {
-        let global = self.declare_variable(name);
+        let global = self.declare_variable(id);
 
         self.node(body_node)?;
 
@@ -269,28 +255,26 @@ impl<'source> Compiler<'source> {
     }
 
     /// Declare existence of local or global variable, not yet assigning a value
-    fn declare_variable(&mut self, name: Token<'source>) -> Option<Constant> {
+    fn declare_variable(&mut self, id: NodeId<'source>) -> Option<Constant> {
         // At runtime, locals aren’t looked up by name.
         // There’s no need to stuff the variable’s name into the constant table, so if
         // the declaration is inside a local scope, we return None instead.
         if self.compiler.is_local_scope() {
-            self.declare_local_variable(name).ok()?;
+            self.declare_local_variable(id).ok()?;
             None
         } else {
-            Some(self.identifier_constant(name).ok()?)
+            Some(self.identifier_constant(id).ok()?)
         }
     }
 
-    fn declare_local_variable(&mut self, name: Token<'source>) -> Result<()> {
+    fn declare_local_variable(&mut self, id: NodeId<'source>) -> Result<()> {
         debug_assert!(self.compiler.is_local_scope());
 
-        if self.compiler.is_local_already_in_scope(name) {
-            return Err(BanjoError::CompileError(
-                "Already a variable with this name in this scope.",
-            ));
+        if self.compiler.is_local_already_in_scope(id) {
+            return BanjoError::compile_err("Already a variable with this name in this scope.");
         }
 
-        self.compiler.add_local(name)
+        self.compiler.add_local(id)
     }
 
     fn define_variable(&mut self, global: Option<Constant>) {
@@ -304,13 +288,13 @@ impl<'source> Compiler<'source> {
         }
     }
 
-    fn identifier_constant(&mut self, name: Token) -> Result<Constant> {
-        let value = Value::String(self.gc.intern(name.lexeme));
+    fn identifier_constant(&mut self, id: NodeId) -> Result<Constant> {
+        let value = Value::String(self.gc.intern(id));
         self.make_constant(value)
     }
 
-    fn push_func_compiler(&mut self, func_name: &str) {
-        let graph_name = self.gc.intern(func_name);
+    fn push_func_compiler(&mut self, func_id: &str) {
+        let graph_name = self.gc.intern(func_id);
         let new_compiler = Box::new(FuncCompiler::new(Some(graph_name)));
         let old_compiler = mem::replace(&mut self.compiler, new_compiler);
         self.compiler.enclosing = Some(old_compiler);
@@ -370,7 +354,7 @@ impl<'source> Compiler<'source> {
         if constant > u8::MAX.into() {
             // TODO we'd want to add another instruction like OpCode::Constant16 which
             // stores the index as a two-byte operand when this limit is hit
-            return Err(BanjoError::CompileError("Too many constants in one chunk."));
+            return BanjoError::compile_err("Too many constants in one chunk.");
         }
         Ok(Constant {
             slot: constant.try_into().unwrap(),
