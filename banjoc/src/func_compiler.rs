@@ -1,5 +1,4 @@
 use crate::{
-    ast::NodeId,
     error::{BanjoError, Result},
     gc::GcRef,
     obj::{BanjoString, Function},
@@ -7,18 +6,18 @@ use crate::{
 };
 
 /// A compiler for a graph, including the implicit top-level function, <script>
-pub struct FuncCompiler<'source> {
+pub struct FuncCompiler<'ast> {
     // TODO can this be improved without using the heap?
-    pub enclosing: Option<Box<FuncCompiler<'source>>>,
+    pub enclosing: Option<Box<FuncCompiler<'ast>>>,
     pub function: Function,
     /// Keeps track of which stack slots are associated with which local
     /// variables or temporaries
-    locals: Vec<Local<'source>>,
+    locals: Vec<Local<'ast>>,
     /// The number of blocks surrounding the current bit of code
     scope_depth: u32,
 }
 
-impl<'source> FuncCompiler<'source> {
+impl<'ast> FuncCompiler<'ast> {
     const MAX_LOCAL_COUNT: usize = u8::MAX as usize + 1;
 
     pub fn new(function_name: Option<GcRef<BanjoString>>) -> Self {
@@ -45,13 +44,16 @@ impl<'source> FuncCompiler<'source> {
         self.scope_depth -= 1;
     }
 
-    pub fn add_local(&mut self, id: NodeId<'source>) -> Result<()> {
+    pub fn add_local(&mut self, node_id: &'ast str) -> Result<()> {
         if self.locals.len() == Self::MAX_LOCAL_COUNT {
             return BanjoError::compile_err("Too many local variables in function.");
         }
 
         // Only "declare" for now, by assigning sentinel value
-        self.locals.push(Local { id, depth: None });
+        self.locals.push(Local {
+            id: node_id,
+            depth: None,
+        });
 
         Ok(())
     }
@@ -70,9 +72,9 @@ impl<'source> FuncCompiler<'source> {
         self.locals.pop();
     }
 
-    pub fn resolve_local(&mut self, id: NodeId) -> Result<Option<LocalIndex>> {
+    pub fn resolve_local(&mut self, node_id: &str) -> Result<Option<LocalIndex>> {
         for (i, local) in self.locals.iter().enumerate().rev() {
-            if id == local.id {
+            if node_id == local.id {
                 return if local.is_initialized() {
                     Ok(Some(i as u8))
                 } else {
@@ -97,7 +99,7 @@ impl<'source> FuncCompiler<'source> {
         }
     }
 
-    pub fn is_local_already_in_scope(&self, id: NodeId) -> bool {
+    pub fn is_local_already_in_scope(&self, node_id: &str) -> bool {
         // Search for a variable with the same name in the current scope
         for local in self.locals.iter().rev() {
             if let Some(depth) = local.depth {
@@ -106,7 +108,7 @@ impl<'source> FuncCompiler<'source> {
                 }
             }
 
-            if id == local.id {
+            if node_id == local.id {
                 return true;
             }
         }
@@ -124,14 +126,14 @@ impl<'source> FuncCompiler<'source> {
     }
 }
 
-pub struct Local<'source> {
-    id: NodeId<'source>,
+pub struct Local<'ast> {
+    id: &'ast str,
     /// The scope depth of the block where the local variable was declared
     /// None means declared but not defined
     depth: Option<u32>,
 }
 
-impl<'source> Local<'source> {
+impl<'ast> Local<'ast> {
     fn is_initialized(&self) -> bool {
         self.depth.is_some()
     }

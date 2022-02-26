@@ -2,17 +2,17 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Deserializer};
 
-pub type NodeId<'source> = &'source str;
+type NodeId = String;
 
 #[derive(Deserialize, Debug)]
-pub struct Ast<'source> {
-    #[serde(borrow, deserialize_with = "deserialize_nodes")]
-    nodes: HashMap<NodeId<'source>, Node<'source>>,
+pub struct Ast {
+    #[serde(deserialize_with = "deserialize_nodes")]
+    nodes: HashMap<NodeId, Node>,
 }
 
-impl<'source> Ast<'source> {
+impl Ast {
     #[must_use]
-    pub fn get_node(&self, node_id: NodeId) -> Option<&Node> {
+    pub fn get_node(&self, node_id: &str) -> Option<&Node> {
         self.nodes.get(node_id)
     }
 
@@ -38,52 +38,52 @@ impl<'source> Ast<'source> {
 
 #[derive(Deserialize, Debug)]
 #[serde(tag = "type", rename_all = "lowercase")]
-pub enum NodeType<'source> {
+pub enum NodeType {
     Literal {
-        value: LiteralType<'source>,
+        value: LiteralType,
     },
     #[serde(alias = "call")]
     FunctionCall {
-        value: NodeId<'source>,
-        arguments: Vec<NodeId<'source>>,
+        value: NodeId,
+        arguments: Vec<NodeId>,
     },
     #[serde(alias = "fn")]
     FunctionDefinition {
-        name: &'source str,
-        arguments: Vec<NodeId<'source>>,
+        name: String,
+        arguments: Vec<NodeId>,
     },
     #[serde(alias = "ref")]
     VariableReference {
-        value: NodeId<'source>,
+        value: NodeId,
     },
     #[serde(alias = "var")]
     VariableDefinition {
-        name: &'source str,
-        arguments: Vec<NodeId<'source>>,
+        name: String,
+        arguments: Vec<NodeId>,
     },
     Param {
-        name: &'source str,
+        name: String,
     },
     Return {
-        arguments: Vec<NodeId<'source>>,
+        arguments: Vec<NodeId>,
     },
     Unary {
         unary_type: UnaryType,
-        arguments: Vec<NodeId<'source>>,
+        arguments: Vec<NodeId>,
     },
     Binary {
         binary_type: BinaryType,
-        arguments: Vec<NodeId<'source>>,
+        arguments: Vec<NodeId>,
     },
 }
 
 #[derive(Deserialize, Debug)]
 #[serde(untagged, rename_all = "lowercase")]
-pub enum LiteralType<'source> {
+pub enum LiteralType {
     Bool(bool),
     Nil,
     Number(f64),
-    String(&'source str),
+    String(String),
 }
 
 #[derive(Deserialize, Debug)]
@@ -115,21 +115,19 @@ pub enum BinaryType {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct Node<'source> {
-    pub id: NodeId<'source>,
-    #[serde(borrow, flatten)]
-    pub node_type: NodeType<'source>,
+pub struct Node {
+    pub id: NodeId,
+    #[serde(flatten)]
+    pub node_type: NodeType,
 }
 
-fn deserialize_nodes<'de: 'source, 'source, D>(
-    deserializer: D,
-) -> Result<HashMap<&'source str, Node<'source>>, D::Error>
+fn deserialize_nodes<'de, D>(deserializer: D) -> Result<HashMap<String, Node>, D::Error>
 where
     D: Deserializer<'de>,
 {
     let mut map = HashMap::new();
     for item in Vec::<Node>::deserialize(deserializer)? {
-        map.insert(item.id, item);
+        map.insert(item.id.to_owned(), item);
     }
     Ok(map)
 }

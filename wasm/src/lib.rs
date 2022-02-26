@@ -4,9 +4,11 @@
 mod utils;
 
 use banjoc::{
+    ast::Ast,
     error::BanjoError,
     vm::{NodeOutputs, Vm},
 };
+use serde::Serialize;
 use utils::set_panic_hook;
 use wasm_bindgen::prelude::*;
 
@@ -27,13 +29,18 @@ pub fn interpret(source: JsValue) -> JsValue {
             }
             BanjoError::RuntimeError(msg) => JsValue::from_str(&format!("runtime error: {msg}")),
         },
-        Ok(value) => serde_wasm_bindgen::to_value(&value).unwrap(),
+        Ok(value) => {
+            let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+            value
+                .serialize(&serializer)
+                .unwrap_or_else(|_| JsValue::from_str("compile error: couldn't serialize result"))
+        }
     }
 }
 
 fn parse_interpret(source: JsValue) -> Result<NodeOutputs, BanjoError> {
     let mut vm = Vm::new();
-    let ast = serde_wasm_bindgen::from_value(source)
+    let ast: Ast = serde_wasm_bindgen::from_value(source)
         .map_err(|e| BanjoError::compile(&format!("JSON parsing error: {e}")))?;
     vm.interpret(ast)
 }
