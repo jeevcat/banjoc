@@ -1,0 +1,38 @@
+{
+  "nodes": [
+    {
+      "type": "fn",
+      "id": "fn2",
+      "name": "fn2",
+      "arguments": ["lit"]
+    },
+    {
+      "type": "fn",
+      "id": "fn1",
+      "name": "fn1",
+      "arguments": ["call2"]
+    },
+    {
+      "type": "call",
+      "id": "call2",
+      "value": "fn2",
+      "arguments": []
+    },
+    {
+      "type": "call",
+      "id": "call1",
+      "value": "fn1",
+      "arguments": []
+    },
+    {
+      "type": "literal",
+      "id": "lit",
+      "value": 1
+    },
+    {
+      "type": "return",
+      "arguments": ["call1"],
+      "id": "return"
+    }
+  ]
+}
