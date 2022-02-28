@@ -49,7 +49,6 @@ pub enum NodeType {
     },
     #[serde(alias = "fn")]
     FunctionDefinition {
-        name: String,
         arguments: Vec<NodeId>,
     },
     #[serde(alias = "ref")]
@@ -58,12 +57,9 @@ pub enum NodeType {
     },
     #[serde(alias = "var")]
     VariableDefinition {
-        name: String,
         arguments: Vec<NodeId>,
     },
-    Param {
-        name: String,
-    },
+    Param,
     Return {
         arguments: Vec<NodeId>,
     },
@@ -121,7 +117,7 @@ pub struct Node {
     pub node_type: NodeType,
 }
 
-fn deserialize_nodes<'de, D>(deserializer: D) -> Result<HashMap<String, Node>, D::Error>
+fn deserialize_nodes<'de, D>(deserializer: D) -> Result<HashMap<NodeId, Node>, D::Error>
 where
     D: Deserializer<'de>,
 {

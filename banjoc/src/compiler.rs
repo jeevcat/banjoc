@@ -68,24 +68,24 @@ impl<'ast> Compiler<'ast> {
                     return BanjoError::compile_err("Function definition has no input.");
                 }
             }
-            NodeType::VariableDefinition { arguments, name } => {
+            NodeType::VariableDefinition { arguments, .. } => {
                 if arguments.len() != 1 {
                     return BanjoError::compile_err("Variable definition has invalid input.");
                 }
                 if let Some(body_node) = self.ast.get_node(&arguments[0]) {
-                    self.var_declaration(body_node, name)?;
+                    self.var_declaration(body_node, &node.id)?;
                 } else {
                     return BanjoError::compile_err("Variable definition has no input.");
                 }
             }
-            NodeType::Param { name } => {
+            NodeType::Param => {
                 // Only declare the param once, but allow same param to be input many times
-                if !self.compiler.is_local_already_in_scope(name) {
+                if !self.compiler.is_local_already_in_scope(&node.id) {
                     self.compiler.increment_arity()?;
-                    self.declare_local_variable(name)?;
+                    self.declare_local_variable(&node.id)?;
                     self.compiler.mark_var_initialized();
                 }
-                self.named_variable(name)?;
+                self.named_variable(&node.id)?;
             }
             NodeType::VariableReference { value } => self.named_variable(value)?,
             NodeType::FunctionCall { arguments, value } => {

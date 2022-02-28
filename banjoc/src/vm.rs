@@ -22,7 +22,8 @@ pub type NodeOutputs = HashMap<String, Value>;
 pub type ValueStack = Stack<Value, { Vm::STACK_MAX }>;
 pub struct Vm {
     pub gc: Gc,
-    /// Output values of nodes in order of execution. Indices correspond with `Compiler::output_nodes`.
+    /// Output values of nodes in order of execution. Indices correspond with
+    /// `Compiler::output_nodes`.
     pub output_values: Vec<Value>,
     stack: ValueStack,
     frames: Stack<CallFrame, { Vm::FRAMES_MAX }>,

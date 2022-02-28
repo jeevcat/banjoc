@@ -4,13 +4,12 @@ use std::{
     process,
 };
 
-use serde_json::from_str;
-
 use banjoc::{
     ast::Ast,
     error::{BanjoError, Result},
     vm::{NodeOutputs, Vm},
 };
+use serde_json::from_str;
 
 fn repl(vm: &mut Vm) {
     loop {
