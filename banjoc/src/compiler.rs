@@ -1,9 +1,12 @@
-use std::mem::{self};
+use std::{
+    collections::HashSet,
+    mem::{self},
+};
 
 use crate::{
     ast::{Ast, BinaryType, LiteralType, Node, NodeType, UnaryType},
     chunk::Chunk,
-    error::{append, BanjoError, Result},
+    error::{BanjoError, Result},
     func_compiler::FuncCompiler,
     gc::{Gc, GcRef},
     obj::Function,
@@ -31,24 +34,51 @@ impl<'ast> Compiler<'ast> {
     }
 
     pub fn compile(&mut self) -> Result<GcRef<Function>> {
-        let mut errors = Ok(());
-        self.begin_scope();
-        for node in self.ast.get_definitions() {
-            if let Err(e) = self.node(node) {
-                append(&mut errors, e);
+        // Topological sort
+
+        // Node is in the current topological sort branch.
+        // If true and this node is visited during compilation, then graph is cyclic
+        let mut in_branch = HashSet::<&str>::new();
+        // Node has already been compiled during topological sort
+        let mut compiled = HashSet::<&str>::new();
+
+        fn visit<'ast>(
+            this: &mut Compiler<'ast>,
+            in_branch: &mut HashSet<&'ast str>,
+            compiled: &mut HashSet<&'ast str>,
+            node: &'ast Node,
+        ) -> Result<()> {
+            if compiled.contains(node.id.as_str()) {
+                return Ok(());
             }
+            if in_branch.contains(node.id.as_str()) {
+                return BanjoError::compile_err("Detected cycle");
+            }
+
+            in_branch.insert(node.id.as_str());
+
+            for child in node.dependencies() {
+                // We can ignore missing nodes as they could reference native functions
+                // Besides the error will surface later if a non-native function is referenced
+                if let Ok(child_node) = this.ast.get_node(child) {
+                    visit(this, in_branch, compiled, child_node)?;
+                }
+            }
+
+            in_branch.remove(node.id.as_str());
+            compiled.insert(node.id.as_str());
+            if matches!(
+                node.node_type,
+                NodeType::VariableDefinition { .. } | NodeType::FunctionDefinition { .. }
+            ) {
+                this.node(node)?;
+            }
+            Ok(())
         }
 
-        let return_node = self
-            .ast
-            .get_return_node()
-            .ok_or_else(|| BanjoError::compile("No return node."))?;
-        if let Err(e) = self.node(return_node) {
-            append(&mut errors, e);
+        for node in self.ast.nodes.values() {
+            visit(self, &mut in_branch, &mut compiled, node)?;
         }
-        self.end_scope();
-
-        errors?;
 
         let function = self.pop_func_compiler().function;
 
@@ -62,21 +92,16 @@ impl<'ast> Compiler<'ast> {
                 if arguments.len() != 1 {
                     return BanjoError::compile_err("Function definition has invalid input.");
                 }
-                if let Some(body_node) = self.ast.get_node(&arguments[0]) {
-                    self.fun_declaration(body_node, &node.id)?;
-                } else {
-                    return BanjoError::compile_err("Function definition has no input.");
-                }
+                let body_node = self.ast.get_node(&arguments[0])?;
+                self.fun_declaration(body_node, &node.id)?;
             }
             NodeType::VariableDefinition { arguments, .. } => {
                 if arguments.len() != 1 {
                     return BanjoError::compile_err("Variable definition has invalid input.");
                 }
-                if let Some(body_node) = self.ast.get_node(&arguments[0]) {
-                    self.var_declaration(body_node, &node.id)?;
-                } else {
-                    return BanjoError::compile_err("Variable definition has no input.");
-                }
+                let body_node = self.ast.get_node(&arguments[0])?;
+                self.var_declaration(body_node, &node.id)?;
+                self.push_output(&node.id);
             }
             NodeType::Param => {
                 // Only declare the param once, but allow same param to be input many times
@@ -87,7 +112,7 @@ impl<'ast> Compiler<'ast> {
                 }
                 self.named_variable(&node.id)?;
             }
-            NodeType::VariableReference { value } => self.named_variable(value)?,
+            NodeType::VariableReference { var_node_id } => self.named_variable(var_node_id)?,
             NodeType::FunctionCall {
                 arguments,
                 fn_node_id,
@@ -96,16 +121,17 @@ impl<'ast> Compiler<'ast> {
                 self.call(&node.id, arguments)?;
             }
             NodeType::Return { arguments } => {
-                if arguments.len() != 1 {
-                    return BanjoError::compile_err("Return has invalid input.");
+                if arguments.len() > 1 {
+                    return BanjoError::compile_err("Return may only have 0 or 1 inputs.");
                 }
-                if let Some(argument) = self.ast.get_node(&arguments[0]) {
+                if arguments.len() == 1 {
+                    let argument = self.ast.get_node(&arguments[0])?;
                     self.node(argument)?;
                 } else {
                     self.emit(OpCode::Nil);
                 }
-                self.output_nodes.push(&node.id);
                 self.emit(OpCode::Return);
+                self.push_output(&node.id);
             }
 
             NodeType::Unary {
@@ -115,12 +141,9 @@ impl<'ast> Compiler<'ast> {
                 if arguments.len() != 1 {
                     return BanjoError::compile_err("Unary has invalid input.");
                 }
-                if let Some(argument) = self.ast.get_node(&arguments[0]) {
-                    self.node(argument)?;
-                    self.emit_unary(unary_type);
-                } else {
-                    return BanjoError::compile_err("Unary has no input.");
-                }
+                let argument = self.ast.get_node(&arguments[0])?;
+                self.node(argument)?;
+                self.emit_unary(unary_type);
             }
             NodeType::Binary {
                 arguments,
@@ -130,11 +153,8 @@ impl<'ast> Compiler<'ast> {
                     return BanjoError::compile_err("Binary has invalid input.");
                 }
                 for term in arguments {
-                    if let Some(term) = self.ast.get_node(term) {
-                        self.node(term)?;
-                    } else {
-                        return BanjoError::compile_err("Binary is missing an input.");
-                    }
+                    let term = self.ast.get_node(term)?;
+                    self.node(term)?;
                 }
                 self.emit_binary(binary_type);
             }
@@ -190,7 +210,7 @@ impl<'ast> Compiler<'ast> {
         &mut self.compiler.function.chunk
     }
 
-    fn named_variable(&mut self, node_id: &str) -> Result<()> {
+    fn named_variable(&mut self, node_id: &'ast str) -> Result<()> {
         let get_opcode = {
             if let Some(index) = self.compiler.resolve_local(node_id)? {
                 OpCode::GetLocal(index)
@@ -228,15 +248,16 @@ impl<'ast> Compiler<'ast> {
         Ok(())
     }
 
-    fn call<T: AsRef<str>>(&mut self, fn_node_id: &'ast str, arg_node_ids: &[T]) -> Result<()> {
+    fn call<T: AsRef<str>>(&mut self, call_node_id: &'ast str, arg_node_ids: &[T]) -> Result<()> {
         for arg in arg_node_ids {
             let arg = self.ast.get_node(arg.as_ref()).unwrap();
             self.node(arg)?;
         }
-        self.output_nodes.push(fn_node_id);
         self.emit(OpCode::Call {
             arg_count: arg_node_ids.len() as u8,
         });
+        println!("call {call_node_id}");
+        self.push_output(call_node_id);
         Ok(())
     }
 
@@ -324,15 +345,6 @@ impl<'ast> Compiler<'ast> {
         self.compiler.begin_scope();
     }
 
-    fn end_scope(&mut self) {
-        // Discard locally declared variables
-        while self.compiler.has_local_in_scope() {
-            self.emit(OpCode::Pop);
-            self.compiler.remove_local();
-        }
-        self.compiler.end_scope();
-    }
-
     fn emit(&mut self, opcode: OpCode) {
         self.current_chunk().write(opcode);
     }
@@ -353,5 +365,12 @@ impl<'ast> Compiler<'ast> {
         Ok(Constant {
             slot: constant.try_into().unwrap(),
         })
+    }
+
+    fn push_output(&mut self, node_id: &'ast str) {
+        if self.compiler.function.arity == 0 {
+            // We can preview the result only if we're in a function which isn't parameterized
+            self.output_nodes.push(node_id);
+        }
     }
 }

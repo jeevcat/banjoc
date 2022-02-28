@@ -24,7 +24,7 @@ pub struct Vm {
     pub gc: Gc,
     /// Output values of nodes in order of execution. Indices correspond with
     /// `Compiler::output_nodes`.
-    pub output_values: Vec<Value>,
+    output_values: Vec<Value>,
     stack: ValueStack,
     frames: Stack<CallFrame, { Vm::FRAMES_MAX }>,
     globals: Table,
@@ -103,6 +103,8 @@ impl Vm {
         self.run()?;
 
         let output_values = std::mem::take(&mut self.output_values);
+        dbg!(&output_nodes);
+        dbg!(&output_values);
         assert_eq!(output_nodes.len(), output_values.len());
         let outputs: NodeOutputs = output_nodes
             .into_iter()
@@ -131,6 +133,7 @@ impl Vm {
                     let result = a.add(b, self)?;
                     self.stack.push(result);
                 }
+                // Load constant/function onto the stack
                 OpCode::Constant(constant) | OpCode::Function(constant) => {
                     let constant = self.current_frame().read_constant(constant);
                     self.stack.push(constant);
@@ -147,13 +150,15 @@ impl Vm {
                 }
                 OpCode::Return => {
                     let result = self.stack.pop();
-                    self.output_values.push(result);
                     let fun_stack_start = self.frames.pop().slot;
                     if self.frames.len() == 0 {
                         // Exit interpreter
                         return Ok(result);
                     }
                     self.stack.truncate(fun_stack_start);
+                    println!("return {result} {}", *self.current_frame().function);
+                    // Output result AFTER popping to parent frame
+                    self.push_output(result);
                     self.stack.push(result);
                 }
                 OpCode::Subtract => self.binary_op(|a, b| Value::Number(a - b))?,
@@ -177,7 +182,14 @@ impl Vm {
                 OpCode::DefineGlobal(constant) => {
                     let name = self.read_string(constant);
                     self.globals.insert(name, *self.stack.peek(0));
-                    self.stack.pop();
+                    let value = self.stack.pop();
+                    match value {
+                        Value::Bool(_) | Value::Nil | Value::Number(_) | Value::String(_) => {
+                            println!("define global {value}");
+                            self.push_output(value);
+                        }
+                        _ => {}
+                    }
                 }
                 OpCode::GetGlobal(constant) => {
                     let name = self.read_string(constant);
@@ -230,7 +242,8 @@ impl Vm {
             Value::NativeFunction(callee) => {
                 let args = self.stack.pop_n(arg_count);
                 let result = (callee.function)(args, self)?;
-                self.output_values.push(result);
+                println!("call {result}");
+                self.push_output(result);
                 self.stack.pop();
                 self.stack.push(result);
                 Ok(())
@@ -278,6 +291,13 @@ impl Vm {
         let native = self.alloc(NativeFunction::new(function));
         self.globals.insert(ls, Value::NativeFunction(native));
         self.stack.pop();
+    }
+
+    fn push_output(&mut self, result: Value) {
+        if self.current_frame().function.arity == 0 {
+            // We can preview the result only if we're in a function that's not parameterized
+            self.output_values.push(result);
+        }
     }
 
     pub fn intern(&mut self, string: &str) -> GcRef<BanjoString> {

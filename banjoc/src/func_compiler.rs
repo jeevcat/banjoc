@@ -40,10 +40,6 @@ impl<'ast> FuncCompiler<'ast> {
         self.scope_depth += 1;
     }
 
-    pub fn end_scope(&mut self) {
-        self.scope_depth -= 1;
-    }
-
     pub fn add_local(&mut self, node_id: &'ast str) -> Result<()> {
         if self.locals.len() == Self::MAX_LOCAL_COUNT {
             return BanjoError::compile_err("Too many local variables in function.");
@@ -59,17 +55,15 @@ impl<'ast> FuncCompiler<'ast> {
     }
 
     pub fn mark_var_initialized(&mut self) {
-        debug_assert!(self.is_local_scope());
+        if !self.is_local_scope() {
+            return;
+        }
 
         // Now "define"
         self.locals
             .last_mut()
             .unwrap()
             .mark_initialized(self.scope_depth);
-    }
-
-    pub fn remove_local(&mut self) {
-        self.locals.pop();
     }
 
     pub fn resolve_local(&mut self, node_id: &str) -> Result<Option<LocalIndex>> {
@@ -88,15 +82,6 @@ impl<'ast> FuncCompiler<'ast> {
     /// Is the current scope a non-global scope?
     pub fn is_local_scope(&self) -> bool {
         self.scope_depth > 0
-    }
-
-    /// Are there locals stored in the current scope?
-    pub fn has_local_in_scope(&self) -> bool {
-        if let Some(depth) = self.locals.last().and_then(|x| x.depth) {
-            depth >= self.scope_depth
-        } else {
-            false
-        }
     }
 
     pub fn is_local_already_in_scope(&self, node_id: &str) -> bool {
