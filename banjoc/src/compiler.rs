@@ -88,8 +88,11 @@ impl<'ast> Compiler<'ast> {
                 self.named_variable(&node.id)?;
             }
             NodeType::VariableReference { value } => self.named_variable(value)?,
-            NodeType::FunctionCall { arguments, value } => {
-                self.named_variable(value)?;
+            NodeType::FunctionCall {
+                arguments,
+                fn_node_id,
+            } => {
+                self.named_variable(fn_node_id)?;
                 self.call(&node.id, arguments)?;
             }
             NodeType::Return { arguments } => {

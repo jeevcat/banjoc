@@ -37,14 +37,14 @@ impl Ast {
 }
 
 #[derive(Deserialize, Debug)]
-#[serde(tag = "type", rename_all = "lowercase")]
+#[serde(tag = "type", rename_all = "camelCase")]
 pub enum NodeType {
     Literal {
         value: LiteralType,
     },
-    #[serde(alias = "call")]
+    #[serde(alias = "call", rename_all = "camelCase")]
     FunctionCall {
-        value: NodeId,
+        fn_node_id: NodeId,
         arguments: Vec<NodeId>,
     },
     #[serde(alias = "fn")]
