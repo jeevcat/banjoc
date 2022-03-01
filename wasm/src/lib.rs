@@ -45,7 +45,7 @@ pub fn interpret(source: JsValue) -> Result<JsValue, JsValue> {
 
 fn parse_interpret(source: JsValue) -> Result<NodeOutputs, BanjoError> {
     let mut vm = Vm::new();
-    let ast: Ast = serde_wasm_bindgen::from_value(source)
+    let source: Ast = serde_wasm_bindgen::from_value(source)
         .map_err(|e| BanjoError::compile("any", &format!("JSON parsing error: {e}")))?;
-    vm.interpret(ast)
+    vm.interpret(source)
 }

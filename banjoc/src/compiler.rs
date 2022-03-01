@@ -19,6 +19,7 @@ pub struct Compiler<'ast> {
     compiler: Box<FuncCompiler<'ast>>,
     gc: &'ast mut Gc,
     ast: &'ast Ast,
+    arities: HashMap<&'ast str, usize>,
     /// IDs of nodes in order of compilation
     pub output_nodes: Vec<&'ast str>,
 }
@@ -29,30 +30,17 @@ impl<'ast> Compiler<'ast> {
             compiler: Box::new(FuncCompiler::new(None, 0)),
             gc,
             ast,
+            arities: ast.calculate_arities(),
             output_nodes: vec![],
         }
     }
 
     pub fn compile(&mut self) -> Result<GcRef<Function>> {
-        // Find roots
-        let mut roots: HashMap<&str, &Node> = self
-            .ast
-            .nodes
-            .iter()
-            .map(|(id, n)| (id.as_str(), n))
-            .collect();
-        for node in self.ast.nodes.values() {
-            for arg in node.arguments() {
-                roots.remove(arg);
-            }
-        }
-
         // Topological sort
         fn visit<'ast>(
             this: &mut Compiler<'ast>,
             in_branch: &mut HashSet<&'ast str>,
             visited: &mut HashSet<&'ast str>,
-            arity: &mut usize,
             node: &'ast Node,
         ) -> Result<()> {
             if visited.contains(node.id.as_str()) {
@@ -64,17 +52,13 @@ impl<'ast> Compiler<'ast> {
 
             in_branch.insert(node.id.as_str());
 
-            if let NodeType::Param = node.node_type {
-                *arity += 1
-            }
-
             let mut errors = BanjoError::CompileErrors(vec![]);
 
             for child in node.dependencies().chain(node.arguments()) {
                 // We shoud ignore missing nodes as they could reference native functions
                 // Besides, the error will surface later if a non-native function is incorrectly referenced
                 if let Ok(child_node) = this.ast.get_node(child) {
-                    visit(this, in_branch, visited, arity, child_node)
+                    visit(this, in_branch, visited, child_node)
                         .unwrap_or_else(|e| errors.append(e));
                 }
             }
@@ -83,15 +67,14 @@ impl<'ast> Compiler<'ast> {
             visited.insert(node.id.as_str());
 
             match &node.node_type {
-                NodeType::FunctionDefinition { arguments } => {
-                    let result = if *arity > 0 {
-                        this.node_function_definition(&node.id, arguments, *arity)
+                NodeType::FunctionDefinition { arguments, .. } => {
+                    let arity = this.get_arity(&node.id);
+                    if arity > 0 {
+                        this.node_function_definition(&node.id, arguments, arity)
                     } else {
                         // Treat a function defn with no parameters as a variable defn, effectively memoizing it
                         this.node_variable_definition(&node.id, arguments)
-                    };
-                    *arity = 0;
-                    result
+                    }
                 }
                 NodeType::VariableDefinition { arguments } => {
                     this.node_variable_definition(&node.id, arguments)
@@ -102,8 +85,6 @@ impl<'ast> Compiler<'ast> {
             errors.to_result(())
         }
 
-        // Arity of current function
-        let mut arity = 0_usize;
         let mut errors = BanjoError::CompileErrors(vec![]);
         // Node is in the current topological sort branch.
         // If true and this node is visited during compilation, then graph is cyclic
@@ -112,10 +93,11 @@ impl<'ast> Compiler<'ast> {
         let mut visited = HashSet::<&str>::new();
 
         // Compile var/fn definitions
+        let roots = self.ast.find_roots();
         for node in roots.values() {
             match node.node_type {
                 NodeType::VariableDefinition { .. } | NodeType::FunctionDefinition { .. } => {
-                    visit(self, &mut in_branch, &mut visited, &mut arity, node)
+                    visit(self, &mut in_branch, &mut visited, node)
                         .unwrap_or_else(|e| errors.append(e))
                 }
                 _ => {}
@@ -154,8 +136,8 @@ impl<'ast> Compiler<'ast> {
                 fn_node_id,
             } => {
                 self.named_variable(fn_node_id)?;
-                // Functions are compiled as variables if they have no parameters, so skip calling them if no arguments are provided
-                if !arguments.is_empty() {
+                // Functions are compiled as variables if they have no parameters, so skip calling them if arity == 0
+                if self.get_arity(fn_node_id) > 0 {
                     self.call(arguments)?;
                 }
                 self.output(&node.id)?;
@@ -463,5 +445,22 @@ impl<'ast> Compiler<'ast> {
         }
 
         Ok(())
+    }
+
+    fn get_arity(&self, fn_node_id: &'ast str) -> usize {
+        #[cfg(debug_assertions)]
+        {
+            if let Ok(node) = self.ast.get_node(fn_node_id) {
+                assert!(matches!(
+                    node.node_type,
+                    NodeType::FunctionDefinition { .. }
+                ));
+            }
+        }
+
+        match self.arities.get(fn_node_id) {
+            Some(arity) => *arity,
+            None => u8::MAX as usize + 1,
+        }
     }
 }

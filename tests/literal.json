@@ -1,0 +1,24 @@
+{
+  "nodes": [
+    {
+      "arguments": [],
+      "id": "b1ae9828da6af44c6b3cd27e54ee40d49",
+      "comment": null,
+      "position_x": -57.899993896484375,
+      "position_y": 139,
+      "result": null,
+      "type": "literal",
+      "value": 3
+    },
+    {
+      "arguments": [],
+      "id": "a6d5647d7efdb4eaeb39e0a4d003a81cc",
+      "comment": null,
+      "position_x": 115.10000610351562,
+      "position_y": 176,
+      "result": "<native fn>",
+      "type": "call",
+      "fnNodeId": "sum"
+    }
+  ]
+}

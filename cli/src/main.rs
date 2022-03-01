@@ -2,6 +2,7 @@ use std::{
     env, fs,
     io::{self, Write},
     process,
+    time::Instant,
 };
 
 use banjoc::{
@@ -58,9 +59,11 @@ fn run_file(vm: &mut Vm, path: &str) {
 }
 
 fn interpret(vm: &mut Vm, source: &str) -> Result<NodeOutputs> {
-    let ast: Ast = from_str(source)
+    let now = Instant::now();
+    let source: Ast = from_str(source)
         .map_err(|e| BanjoError::compile("any", &format!("JSON parsing error: {e}")))?;
-    vm.interpret(ast)
+    println!("Parsing took {:.0?}", now.elapsed());
+    vm.interpret(source)
 }
 
 fn main() {
