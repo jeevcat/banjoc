@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     mem::{self},
 };
 
@@ -34,22 +34,28 @@ impl<'ast> Compiler<'ast> {
     }
 
     pub fn compile(&mut self) -> Result<GcRef<Function>> {
+        // Find roots
+        let mut roots: HashMap<&str, &Node> = self
+            .ast
+            .nodes
+            .iter()
+            .map(|(id, n)| (id.as_str(), n))
+            .collect();
+        for node in self.ast.nodes.values() {
+            for arg in node.arguments() {
+                roots.remove(arg);
+            }
+        }
+
         // Topological sort
-
-        // Node is in the current topological sort branch.
-        // If true and this node is visited during compilation, then graph is cyclic
-        let mut in_branch = HashSet::<&str>::new();
-        // Node has already been compiled during topological sort
-        let mut compiled = HashSet::<&str>::new();
-
         fn visit<'ast>(
             this: &mut Compiler<'ast>,
             in_branch: &mut HashSet<&'ast str>,
-            compiled: &mut HashSet<&'ast str>,
+            visited: &mut HashSet<&'ast str>,
             arity: &mut usize,
             node: &'ast Node,
         ) -> Result<()> {
-            if compiled.contains(node.id.as_str()) {
+            if visited.contains(node.id.as_str()) {
                 return Ok(());
             }
             if in_branch.contains(node.id.as_str()) {
@@ -68,42 +74,59 @@ impl<'ast> Compiler<'ast> {
                 // We shoud ignore missing nodes as they could reference native functions
                 // Besides, the error will surface later if a non-native function is incorrectly referenced
                 if let Ok(child_node) = this.ast.get_node(child) {
-                    visit(this, in_branch, compiled, arity, child_node)
+                    visit(this, in_branch, visited, arity, child_node)
                         .unwrap_or_else(|e| errors.append(e));
                 }
             }
 
             in_branch.remove(node.id.as_str());
-            compiled.insert(node.id.as_str());
+            visited.insert(node.id.as_str());
 
             match &node.node_type {
                 NodeType::FunctionDefinition { arguments } => {
-                    if *arity > 0 {
+                    let result = if *arity > 0 {
                         this.node_function_definition(&node.id, arguments, *arity)
-                            .unwrap_or_else(|e| errors.append(e));
                     } else {
                         // Treat a function defn with no parameters as a variable defn, effectively memoizing it
                         this.node_variable_definition(&node.id, arguments)
-                            .unwrap_or_else(|e| errors.append(e));
-                    }
+                    };
                     *arity = 0;
+                    result
                 }
                 NodeType::VariableDefinition { arguments } => {
                     this.node_variable_definition(&node.id, arguments)
-                        .unwrap_or_else(|e| errors.append(e));
                 }
-                _ => {}
+                _ => Ok(()),
             }
+            .unwrap_or_else(|e| errors.append(e));
             errors.to_result(())
         }
 
         // Arity of current function
         let mut arity = 0_usize;
-
         let mut errors = BanjoError::CompileErrors(vec![]);
-        for node in self.ast.nodes.values() {
-            visit(self, &mut in_branch, &mut compiled, &mut arity, node)
-                .unwrap_or_else(|e| errors.append(e));
+        // Node is in the current topological sort branch.
+        // If true and this node is visited during compilation, then graph is cyclic
+        let mut in_branch = HashSet::<&str>::new();
+        // Node has already been processed during topological sort
+        let mut visited = HashSet::<&str>::new();
+
+        // Compile var/fn definitions
+        for node in roots.values() {
+            match node.node_type {
+                NodeType::VariableDefinition { .. } | NodeType::FunctionDefinition { .. } => {
+                    visit(self, &mut in_branch, &mut visited, &mut arity, node)
+                        .unwrap_or_else(|e| errors.append(e))
+                }
+                _ => {}
+            }
+        }
+        // Also compile disconnected roots AFTER definitions
+        for node in roots.values() {
+            match node.node_type {
+                NodeType::VariableDefinition { .. } | NodeType::FunctionDefinition { .. } => {}
+                _ => self.node(node).unwrap_or_else(|e| errors.append(e)),
+            }
         }
 
         let function = self.pop_func_compiler().function;

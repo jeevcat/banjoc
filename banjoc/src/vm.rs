@@ -103,8 +103,6 @@ impl Vm {
         self.run()?;
 
         let output_values = std::mem::take(&mut self.output_values);
-        dbg!(&output_nodes);
-        dbg!(&output_values);
         assert_eq!(output_nodes.len(), output_values.len());
         let outputs: NodeOutputs = output_nodes
             .into_iter()

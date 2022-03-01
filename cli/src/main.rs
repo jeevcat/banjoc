@@ -23,7 +23,7 @@ fn repl(vm: &mut Vm) {
             break;
         }
         if let Ok(result) = interpret(vm, &line) {
-            println!("{:?}", result);
+            println!("{:#?}", result);
         }
     }
 }
@@ -37,7 +37,7 @@ fn run_file(vm: &mut Vm, path: &str) {
         }
     };
     match interpret(vm, &source) {
-        Ok(result) => println!("{:?}", result),
+        Ok(result) => println!("{:#?}", result),
         Err(error) => match error {
             BanjoError::CompileError((node_id, e)) => {
                 eprint!("{node_id}: {e}");

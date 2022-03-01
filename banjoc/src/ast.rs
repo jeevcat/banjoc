@@ -112,6 +112,19 @@ pub struct Node {
 }
 
 impl Node {
+    pub fn arguments(&self) -> impl Iterator<Item = &str> {
+        match &self.node_type {
+            NodeType::FunctionDefinition { arguments }
+            | NodeType::VariableDefinition { arguments }
+            | NodeType::Return { arguments }
+            | NodeType::Unary { arguments, .. }
+            | NodeType::FunctionCall { arguments, .. }
+            | NodeType::Binary { arguments, .. } => arguments.as_slice(),
+            _ => &[],
+        }
+        .iter()
+        .map(String::as_str)
+    }
     pub fn dependencies(&self) -> impl Iterator<Item = &str> {
         // https://stackoverflow.com/a/54728634/4514393
         let mut iter_a = None;
