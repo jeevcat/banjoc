@@ -36,4 +36,8 @@ pub enum OpCode {
         arg_count: u8,
     },
     Function(Constant),
+    // Write top of stack to output
+    Output {
+        output_index: u8,
+    },
 }

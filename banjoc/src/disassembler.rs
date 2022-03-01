@@ -47,6 +47,7 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> usize {
         OpCode::GetLocal(index) => byte_instruction("OP_GET_LOCAL", offset, index),
         OpCode::Call { arg_count } => byte_instruction("OP_CALL", offset, arg_count),
         OpCode::Function(constant) => constant_instruction("OP_FUNCTION", chunk, offset, constant),
+        OpCode::Output { output_index } => byte_instruction("OP_OUTPUT", offset, output_index),
     }
 }
 

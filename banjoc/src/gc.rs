@@ -377,7 +377,7 @@ mod tests {
         let mut ls = BanjoString::new("func".to_string());
         let pointer = unsafe { NonNull::new_unchecked(&mut ls) };
         let gcref = GcRef { pointer };
-        let ls = Function::new(Some(gcref));
+        let ls = Function::new(Some(gcref), 0);
         assert!(matches!(ls.header.obj_type, ObjectType::Function));
     }
 

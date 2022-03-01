@@ -20,7 +20,7 @@ pub struct FuncCompiler<'ast> {
 impl<'ast> FuncCompiler<'ast> {
     const MAX_LOCAL_COUNT: usize = u8::MAX as usize + 1;
 
-    pub fn new(function_name: Option<GcRef<BanjoString>>) -> Self {
+    pub fn new(function_name: Option<GcRef<BanjoString>>, arity: usize) -> Self {
         let mut locals = Vec::with_capacity(Self::MAX_LOCAL_COUNT);
         // Claim stack slot zero for the VM's own internal use
         locals.push(Local {
@@ -31,7 +31,7 @@ impl<'ast> FuncCompiler<'ast> {
         Self {
             enclosing: None,
             locals,
-            function: Function::new(function_name),
+            function: Function::new(function_name, arity),
             scope_depth: 0,
         }
     }
@@ -40,13 +40,9 @@ impl<'ast> FuncCompiler<'ast> {
         self.scope_depth += 1;
     }
 
-    pub fn end_scope(&mut self) {
-        self.scope_depth -= 1;
-    }
-
     pub fn add_local(&mut self, node_id: &'ast str) -> Result<()> {
         if self.locals.len() == Self::MAX_LOCAL_COUNT {
-            return BanjoError::compile_err("Too many local variables in function.");
+            return BanjoError::compile_err(node_id, "Too many local variables in function.");
         }
 
         // Only "declare" for now, by assigning sentinel value
@@ -59,7 +55,9 @@ impl<'ast> FuncCompiler<'ast> {
     }
 
     pub fn mark_var_initialized(&mut self) {
-        debug_assert!(self.is_local_scope());
+        if !self.is_local_scope() {
+            return;
+        }
 
         // Now "define"
         self.locals
@@ -68,17 +66,16 @@ impl<'ast> FuncCompiler<'ast> {
             .mark_initialized(self.scope_depth);
     }
 
-    pub fn remove_local(&mut self) {
-        self.locals.pop();
-    }
-
     pub fn resolve_local(&mut self, node_id: &str) -> Result<Option<LocalIndex>> {
         for (i, local) in self.locals.iter().enumerate().rev() {
             if node_id == local.id {
                 return if local.is_initialized() {
                     Ok(Some(i as u8))
                 } else {
-                    BanjoError::compile_err("Can't read local variable in its own initializer.")
+                    BanjoError::compile_err(
+                        node_id,
+                        "Can't read local variable in its own initializer.",
+                    )
                 };
             }
         }
@@ -88,15 +85,6 @@ impl<'ast> FuncCompiler<'ast> {
     /// Is the current scope a non-global scope?
     pub fn is_local_scope(&self) -> bool {
         self.scope_depth > 0
-    }
-
-    /// Are there locals stored in the current scope?
-    pub fn has_local_in_scope(&self) -> bool {
-        if let Some(depth) = self.locals.last().and_then(|x| x.depth) {
-            depth >= self.scope_depth
-        } else {
-            false
-        }
     }
 
     pub fn is_local_already_in_scope(&self, node_id: &str) -> bool {
@@ -113,16 +101,6 @@ impl<'ast> FuncCompiler<'ast> {
             }
         }
         false
-    }
-
-    pub fn increment_arity(&mut self) -> Result<()> {
-        self.function.arity += 1;
-
-        if self.function.arity > 255 {
-            BanjoError::compile_err("Can't have more than 255 parameters.")
-        } else {
-            Ok(())
-        }
     }
 }
 

@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    ast::Ast,
+    ast::{Ast, NodeId},
     compiler::Compiler,
     error::{BanjoError, Result},
     gc::{GarbageCollect, Gc, GcRef},
@@ -17,14 +17,14 @@ use crate::{
     value::Value,
 };
 
-pub type NodeOutputs = HashMap<String, Value>;
+pub type NodeOutputs = HashMap<NodeId, Value>;
 
 pub type ValueStack = Stack<Value, { Vm::STACK_MAX }>;
 pub struct Vm {
     pub gc: Gc,
     /// Output values of nodes in order of execution. Indices correspond with
     /// `Compiler::output_nodes`.
-    pub output_values: Vec<Value>,
+    output_values: Vec<Value>,
     stack: ValueStack,
     frames: Stack<CallFrame, { Vm::FRAMES_MAX }>,
     globals: Table,
@@ -131,6 +131,7 @@ impl Vm {
                     let result = a.add(b, self)?;
                     self.stack.push(result);
                 }
+                // Load constant/function onto the stack
                 OpCode::Constant(constant) | OpCode::Function(constant) => {
                     let constant = self.current_frame().read_constant(constant);
                     self.stack.push(constant);
@@ -147,7 +148,6 @@ impl Vm {
                 }
                 OpCode::Return => {
                     let result = self.stack.pop();
-                    self.output_values.push(result);
                     let fun_stack_start = self.frames.pop().slot;
                     if self.frames.len() == 0 {
                         // Exit interpreter
@@ -195,6 +195,13 @@ impl Vm {
                     let arg_count = arg_count as usize;
                     self.call_value(*self.stack.peek(arg_count), arg_count)?;
                 }
+                OpCode::Output { output_index } => {
+                    let min_len = (output_index + 1) as usize;
+                    if self.output_values.len() < min_len {
+                        self.output_values.resize_with(min_len, || Value::Nil);
+                    }
+                    self.output_values[output_index as usize] = *self.stack.peek(0);
+                }
             }
         }
     }
@@ -230,7 +237,6 @@ impl Vm {
             Value::NativeFunction(callee) => {
                 let args = self.stack.pop_n(arg_count);
                 let result = (callee.function)(args, self)?;
-                self.output_values.push(result);
                 self.stack.pop();
                 self.stack.push(result);
                 Ok(())

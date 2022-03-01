@@ -2,38 +2,15 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Deserializer};
 
-type NodeId = String;
+use crate::error::BanjoError;
+
+pub type NodeId = String;
+type Nodes = HashMap<String, Node>;
 
 #[derive(Deserialize, Debug)]
 pub struct Ast {
     #[serde(deserialize_with = "deserialize_nodes")]
-    nodes: HashMap<NodeId, Node>,
-}
-
-impl Ast {
-    #[must_use]
-    pub fn get_node(&self, node_id: &str) -> Option<&Node> {
-        self.nodes.get(node_id)
-    }
-
-    #[must_use]
-    pub fn get_return_node(&self) -> Option<&Node> {
-        // TODO perf
-        self.nodes
-            .iter()
-            .map(|(_, node)| node)
-            .find(|node| matches!(node.node_type, NodeType::Return { .. }))
-    }
-
-    pub fn get_definitions(&self) -> impl Iterator<Item = &Node> {
-        // TODO perf
-        self.nodes.iter().map(|(_, node)| node).filter(|node| {
-            matches!(
-                node.node_type,
-                NodeType::VariableDefinition { .. } | NodeType::FunctionDefinition { .. }
-            )
-        })
-    }
+    pub nodes: Nodes,
 }
 
 #[derive(Deserialize, Debug)]
@@ -53,7 +30,7 @@ pub enum NodeType {
     },
     #[serde(alias = "ref")]
     VariableReference {
-        value: NodeId,
+        var_node_id: NodeId,
     },
     #[serde(alias = "var")]
     VariableDefinition {
@@ -117,13 +94,81 @@ pub struct Node {
     pub node_type: NodeType,
 }
 
-fn deserialize_nodes<'de, D>(deserializer: D) -> Result<HashMap<NodeId, Node>, D::Error>
+impl Node {
+    pub fn arguments(&self) -> impl Iterator<Item = &str> {
+        match &self.node_type {
+            NodeType::FunctionDefinition { arguments, .. }
+            | NodeType::VariableDefinition { arguments }
+            | NodeType::Return { arguments }
+            | NodeType::Unary { arguments, .. }
+            | NodeType::FunctionCall { arguments, .. }
+            | NodeType::Binary { arguments, .. } => arguments.as_slice(),
+            _ => &[],
+        }
+        .iter()
+        .map(String::as_str)
+    }
+    pub fn dependencies(&self) -> impl Iterator<Item = &str> {
+        match &self.node_type {
+            NodeType::VariableReference { var_node_id } => Some(var_node_id.as_str()),
+            NodeType::FunctionCall { fn_node_id, .. } => Some(fn_node_id.as_str()),
+            _ => None,
+        }
+        .into_iter()
+    }
+}
+
+fn deserialize_nodes<'de, D>(deserializer: D) -> Result<Nodes, D::Error>
 where
     D: Deserializer<'de>,
 {
     let mut map = HashMap::new();
     for item in Vec::<Node>::deserialize(deserializer)? {
-        map.insert(item.id.to_owned(), item);
+        map.insert(item.id.clone(), item);
     }
     Ok(map)
+}
+
+impl Ast {
+    pub fn get_node(&self, node_id: &str) -> Result<&Node, BanjoError> {
+        self.nodes
+            .get(node_id)
+            .ok_or_else(|| BanjoError::compile(node_id, format!("Unknown node id {node_id}.")))
+    }
+
+    pub fn find_roots(&self) -> HashMap<&str, &Node> {
+        let mut roots: HashMap<&str, &Node> =
+            self.nodes.iter().map(|(id, n)| (id.as_str(), n)).collect();
+        for node in self.nodes.values() {
+            for arg in node.arguments() {
+                roots.remove(arg);
+            }
+        }
+        roots
+    }
+
+    pub fn calculate_arities(&self) -> HashMap<&str, usize> {
+        fn traverse(nodes: &Nodes, node_id: &str, current_arity: &mut usize) {
+            if let Some(node) = nodes.get(node_id) {
+                if let NodeType::Param = node.node_type {
+                    *current_arity += 1;
+                }
+                for child_id in node.arguments() {
+                    traverse(nodes, child_id, current_arity);
+                }
+            }
+        }
+
+        self.nodes
+            .values()
+            .filter_map(|node| {
+                if let NodeType::FunctionDefinition { .. } = node.node_type {
+                    let mut arity = 0_usize;
+                    traverse(&self.nodes, &node.id, &mut arity);
+                    return Some((node.id.as_str(), arity));
+                }
+                None
+            })
+            .collect()
+    }
 }
