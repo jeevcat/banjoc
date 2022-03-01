@@ -26,7 +26,7 @@ pub struct Compiler<'ast> {
 impl<'ast> Compiler<'ast> {
     pub fn new(ast: &'ast Ast, gc: &'ast mut Gc) -> Compiler<'ast> {
         Self {
-            compiler: Box::new(FuncCompiler::new(None)),
+            compiler: Box::new(FuncCompiler::new(None, 0)),
             gc,
             ast,
             output_nodes: vec![],
@@ -46,6 +46,7 @@ impl<'ast> Compiler<'ast> {
             this: &mut Compiler<'ast>,
             in_branch: &mut HashSet<&'ast str>,
             compiled: &mut HashSet<&'ast str>,
+            arity: &mut usize,
             node: &'ast Node,
         ) -> Result<()> {
             if compiled.contains(node.id.as_str()) {
@@ -57,27 +58,45 @@ impl<'ast> Compiler<'ast> {
 
             in_branch.insert(node.id.as_str());
 
+            match node.node_type {
+                NodeType::FunctionDefinition { .. } => *arity = 0,
+                NodeType::Param => *arity += 1,
+                _ => {}
+            }
+
             for child in node.dependencies() {
-                // We can ignore missing nodes as they could reference native functions
-                // Besides the error will surface later if a non-native function is referenced
+                // We shoud ignore missing nodes as they could reference native functions
+                // Besides, the error will surface later if a non-native function is incorrectly referenced
                 if let Ok(child_node) = this.ast.get_node(child) {
-                    visit(this, in_branch, compiled, child_node)?;
+                    visit(this, in_branch, compiled, arity, child_node)?;
                 }
             }
 
             in_branch.remove(node.id.as_str());
             compiled.insert(node.id.as_str());
-            if matches!(
-                node.node_type,
-                NodeType::VariableDefinition { .. } | NodeType::FunctionDefinition { .. }
-            ) {
-                this.node(node)?;
+
+            match &node.node_type {
+                NodeType::FunctionDefinition { arguments } => {
+                    if *arity > 0 {
+                        this.node_function_definition(&node.id, arguments, *arity)?
+                    } else {
+                        // Treat a function defn with no parameters as a variable defn, effectively memoizing it
+                        this.node_variable_definition(&node.id, arguments)?
+                    }
+                }
+                NodeType::VariableDefinition { arguments } => {
+                    this.node_variable_definition(&node.id, arguments)?
+                }
+                _ => {}
             }
             Ok(())
         }
 
+        // Arity of current function
+        let mut arity = 0_usize;
+
         for node in self.ast.nodes.values() {
-            visit(self, &mut in_branch, &mut compiled, node)?;
+            visit(self, &mut in_branch, &mut compiled, &mut arity, node)?;
         }
 
         let function = self.pop_func_compiler().function;
@@ -88,37 +107,28 @@ impl<'ast> Compiler<'ast> {
     fn node(&mut self, node: &'ast Node) -> Result<()> {
         match &node.node_type {
             NodeType::Literal { value } => self.literal(value)?,
-            NodeType::FunctionDefinition { arguments, .. } => {
-                if arguments.len() != 1 {
-                    return BanjoError::compile_err("Function definition has invalid input.");
-                }
-                let body_node = self.ast.get_node(&arguments[0])?;
-                self.fun_declaration(body_node, &node.id)?;
-            }
-            NodeType::VariableDefinition { arguments, .. } => {
-                if arguments.len() != 1 {
-                    return BanjoError::compile_err("Variable definition has invalid input.");
-                }
-                let body_node = self.ast.get_node(&arguments[0])?;
-                self.var_declaration(body_node, &node.id)?;
-                self.push_output(&node.id);
-            }
             NodeType::Param => {
                 // Only declare the param once, but allow same param to be input many times
                 if !self.compiler.is_local_already_in_scope(&node.id) {
-                    self.compiler.increment_arity()?;
                     self.declare_local_variable(&node.id)?;
                     self.compiler.mark_var_initialized();
                 }
                 self.named_variable(&node.id)?;
             }
-            NodeType::VariableReference { var_node_id } => self.named_variable(var_node_id)?,
+            NodeType::VariableReference { var_node_id } => {
+                self.named_variable(var_node_id)?;
+                self.output(&node.id)?;
+            }
             NodeType::FunctionCall {
                 arguments,
                 fn_node_id,
             } => {
                 self.named_variable(fn_node_id)?;
-                self.call(&node.id, arguments)?;
+                // Functions are compiled as variables if they have no parameters, so skip calling them if no arguments are provided
+                if !arguments.is_empty() {
+                    self.call(arguments)?;
+                }
+                self.output(&node.id)?;
             }
             NodeType::Return { arguments } => {
                 if arguments.len() > 1 {
@@ -131,7 +141,7 @@ impl<'ast> Compiler<'ast> {
                     self.emit(OpCode::Nil);
                 }
                 self.emit(OpCode::Return);
-                self.push_output(&node.id);
+                self.output(&node.id)?;
             }
 
             NodeType::Unary {
@@ -158,7 +168,38 @@ impl<'ast> Compiler<'ast> {
                 }
                 self.emit_binary(binary_type);
             }
+            NodeType::FunctionDefinition { .. } | NodeType::VariableDefinition { .. } => {
+                // Should only be called via topological sort in Self::compile()
+                unreachable!();
+            }
         }
+        Ok(())
+    }
+
+    fn node_function_definition(
+        &mut self,
+        node_id: &'ast str,
+        arguments: &[String],
+        arity: usize,
+    ) -> Result<()> {
+        if arguments.len() != 1 {
+            return BanjoError::compile_err("Function definition has invalid input.");
+        }
+        if arity > 255 {
+            return BanjoError::compile_err("Can't have more than 255 parameters.");
+        }
+        let body_node = self.ast.get_node(&arguments[0])?;
+        self.fun_declaration(body_node, node_id, arity)?;
+        Ok(())
+    }
+
+    fn node_variable_definition(&mut self, node_id: &'ast str, arguments: &[String]) -> Result<()> {
+        if arguments.len() != 1 {
+            return BanjoError::compile_err("Variable definition has invalid input.");
+        }
+
+        let body_node = self.ast.get_node(&arguments[0])?;
+        self.var_declaration(body_node, node_id)?;
         Ok(())
     }
 
@@ -224,16 +265,21 @@ impl<'ast> Compiler<'ast> {
         Ok(())
     }
 
-    fn fun_declaration(&mut self, body_node: &'ast Node, node_id: &'ast str) -> Result<()> {
+    fn fun_declaration(
+        &mut self,
+        body_node: &'ast Node,
+        node_id: &'ast str,
+        arity: usize,
+    ) -> Result<()> {
         let global = self.declare_variable(node_id);
         self.compiler.mark_var_initialized();
-        self.function(body_node, node_id)?;
+        self.function(body_node, node_id, arity)?;
         self.define_variable(global);
         Ok(())
     }
 
-    fn function(&mut self, body_node: &'ast Node, node_id: &str) -> Result<()> {
-        self.push_func_compiler(node_id);
+    fn function(&mut self, body_node: &'ast Node, node_id: &str, arity: usize) -> Result<()> {
+        self.push_func_compiler(node_id, arity);
         self.begin_scope();
 
         self.node(body_node)?;
@@ -248,7 +294,7 @@ impl<'ast> Compiler<'ast> {
         Ok(())
     }
 
-    fn call<T: AsRef<str>>(&mut self, call_node_id: &'ast str, arg_node_ids: &[T]) -> Result<()> {
+    fn call<T: AsRef<str>>(&mut self, arg_node_ids: &[T]) -> Result<()> {
         for arg in arg_node_ids {
             let arg = self.ast.get_node(arg.as_ref()).unwrap();
             self.node(arg)?;
@@ -256,8 +302,6 @@ impl<'ast> Compiler<'ast> {
         self.emit(OpCode::Call {
             arg_count: arg_node_ids.len() as u8,
         });
-        println!("call {call_node_id}");
-        self.push_output(call_node_id);
         Ok(())
     }
 
@@ -265,6 +309,7 @@ impl<'ast> Compiler<'ast> {
         let global = self.declare_variable(node_id);
 
         self.node(body_node)?;
+        self.output(node_id)?;
 
         self.define_variable(global);
         Ok(())
@@ -309,9 +354,9 @@ impl<'ast> Compiler<'ast> {
         self.make_constant(value)
     }
 
-    fn push_func_compiler(&mut self, func_id: &str) {
+    fn push_func_compiler(&mut self, func_id: &str, arity: usize) {
         let graph_name = self.gc.intern(func_id);
-        let new_compiler = Box::new(FuncCompiler::new(Some(graph_name)));
+        let new_compiler = Box::new(FuncCompiler::new(Some(graph_name), arity));
         let old_compiler = mem::replace(&mut self.compiler, new_compiler);
         self.compiler.enclosing = Some(old_compiler);
     }
@@ -336,7 +381,7 @@ impl<'ast> Compiler<'ast> {
             *compiler
         } else {
             // TODO no need to put a random object into self.compiler
-            let compiler = mem::replace(&mut self.compiler, Box::new(FuncCompiler::new(None)));
+            let compiler = mem::replace(&mut self.compiler, Box::new(FuncCompiler::new(None, 0)));
             *compiler
         }
     }
@@ -367,10 +412,17 @@ impl<'ast> Compiler<'ast> {
         })
     }
 
-    fn push_output(&mut self, node_id: &'ast str) {
+    fn output(&mut self, node_id: &'ast str) -> Result<()> {
+        // We can preview the result only if we're in a function which isn't parameterized
         if self.compiler.function.arity == 0 {
-            // We can preview the result only if we're in a function which isn't parameterized
+            if self.output_nodes.len() >= 255 {
+                return BanjoError::compile_err("Can't preview the output of more than 255 nodes");
+            }
             self.output_nodes.push(node_id);
+            let output_index = (self.output_nodes.len() - 1) as u8;
+            self.emit(OpCode::Output { output_index });
         }
+
+        Ok(())
     }
 }

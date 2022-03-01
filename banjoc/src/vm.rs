@@ -156,9 +156,6 @@ impl Vm {
                         return Ok(result);
                     }
                     self.stack.truncate(fun_stack_start);
-                    println!("return {result} {}", *self.current_frame().function);
-                    // Output result AFTER popping to parent frame
-                    self.push_output(result);
                     self.stack.push(result);
                 }
                 OpCode::Subtract => self.binary_op(|a, b| Value::Number(a - b))?,
@@ -182,14 +179,7 @@ impl Vm {
                 OpCode::DefineGlobal(constant) => {
                     let name = self.read_string(constant);
                     self.globals.insert(name, *self.stack.peek(0));
-                    let value = self.stack.pop();
-                    match value {
-                        Value::Bool(_) | Value::Nil | Value::Number(_) | Value::String(_) => {
-                            println!("define global {value}");
-                            self.push_output(value);
-                        }
-                        _ => {}
-                    }
+                    self.stack.pop();
                 }
                 OpCode::GetGlobal(constant) => {
                     let name = self.read_string(constant);
@@ -206,6 +196,13 @@ impl Vm {
                 OpCode::Call { arg_count } => {
                     let arg_count = arg_count as usize;
                     self.call_value(*self.stack.peek(arg_count), arg_count)?;
+                }
+                OpCode::Output { output_index } => {
+                    let min_len = (output_index + 1) as usize;
+                    if self.output_values.len() < min_len {
+                        self.output_values.resize_with(min_len, || Value::Nil);
+                    }
+                    self.output_values[output_index as usize] = *self.stack.peek(0);
                 }
             }
         }
@@ -242,8 +239,6 @@ impl Vm {
             Value::NativeFunction(callee) => {
                 let args = self.stack.pop_n(arg_count);
                 let result = (callee.function)(args, self)?;
-                println!("call {result}");
-                self.push_output(result);
                 self.stack.pop();
                 self.stack.push(result);
                 Ok(())
@@ -291,13 +286,6 @@ impl Vm {
         let native = self.alloc(NativeFunction::new(function));
         self.globals.insert(ls, Value::NativeFunction(native));
         self.stack.pop();
-    }
-
-    fn push_output(&mut self, result: Value) {
-        if self.current_frame().function.arity == 0 {
-            // We can preview the result only if we're in a function that's not parameterized
-            self.output_values.push(result);
-        }
     }
 
     pub fn intern(&mut self, string: &str) -> GcRef<BanjoString> {

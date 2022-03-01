@@ -60,10 +60,10 @@ pub struct Function {
 }
 
 impl Function {
-    pub fn new(name: Option<GcRef<BanjoString>>) -> Self {
+    pub fn new(name: Option<GcRef<BanjoString>>, arity: usize) -> Self {
         Self {
             header: ObjHeader::new(ObjectType::Function),
-            arity: 0,
+            arity,
             chunk: Chunk::new(),
             name,
         }

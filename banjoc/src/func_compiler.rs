@@ -20,7 +20,7 @@ pub struct FuncCompiler<'ast> {
 impl<'ast> FuncCompiler<'ast> {
     const MAX_LOCAL_COUNT: usize = u8::MAX as usize + 1;
 
-    pub fn new(function_name: Option<GcRef<BanjoString>>) -> Self {
+    pub fn new(function_name: Option<GcRef<BanjoString>>, arity: usize) -> Self {
         let mut locals = Vec::with_capacity(Self::MAX_LOCAL_COUNT);
         // Claim stack slot zero for the VM's own internal use
         locals.push(Local {
@@ -31,7 +31,7 @@ impl<'ast> FuncCompiler<'ast> {
         Self {
             enclosing: None,
             locals,
-            function: Function::new(function_name),
+            function: Function::new(function_name, arity),
             scope_depth: 0,
         }
     }
@@ -98,16 +98,6 @@ impl<'ast> FuncCompiler<'ast> {
             }
         }
         false
-    }
-
-    pub fn increment_arity(&mut self) -> Result<()> {
-        self.function.arity += 1;
-
-        if self.function.arity > 255 {
-            BanjoError::compile_err("Can't have more than 255 parameters.")
-        } else {
-            Ok(())
-        }
     }
 }
 
