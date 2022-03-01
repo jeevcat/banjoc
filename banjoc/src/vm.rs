@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    ast::Ast,
+    ast::{Ast, NodeId},
     compiler::Compiler,
     error::{BanjoError, Result},
     gc::{GarbageCollect, Gc, GcRef},
@@ -17,7 +17,7 @@ use crate::{
     value::Value,
 };
 
-pub type NodeOutputs = HashMap<String, Value>;
+pub type NodeOutputs = HashMap<NodeId, Value>;
 
 pub type ValueStack = Stack<Value, { Vm::STACK_MAX }>;
 pub struct Vm {

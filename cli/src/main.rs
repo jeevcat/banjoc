@@ -39,13 +39,13 @@ fn run_file(vm: &mut Vm, path: &str) {
     match interpret(vm, &source) {
         Ok(result) => println!("{:?}", result),
         Err(error) => match error {
-            BanjoError::CompileError(e) => {
-                eprint!("{e}");
+            BanjoError::CompileError((node_id, e)) => {
+                eprint!("{node_id}: {e}");
                 process::exit(65);
             }
             BanjoError::CompileErrors(errors) => {
-                for e in errors {
-                    eprintln!("{e}");
+                for (node_id, e) in errors {
+                    eprint!("{node_id}: {e}");
                 }
                 process::exit(65);
             }
@@ -58,8 +58,8 @@ fn run_file(vm: &mut Vm, path: &str) {
 }
 
 fn interpret(vm: &mut Vm, source: &str) -> Result<NodeOutputs> {
-    let ast: Ast =
-        from_str(source).map_err(|e| BanjoError::compile(&format!("JSON parsing error: {e}")))?;
+    let ast: Ast = from_str(source)
+        .map_err(|e| BanjoError::compile("any", &format!("JSON parsing error: {e}")))?;
     vm.interpret(ast)
 }
 

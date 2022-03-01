@@ -1,0 +1,118 @@
+{
+  "nodes": [
+    {
+      "arguments": ["x66b372842949445f9e9b317b3c1e6a57", "mc79789c826ed4854a76c0f99cf9be7fc"],
+      "id": "a986be2458d9e4913a1786a880ba32ff0",
+      "comment": null,
+      "position_x": 226.10000610351562,
+      "position_y": -138,
+      "result": 40,
+      "type": "call",
+      "fnNodeId": "sum"
+    },
+    {
+      "arguments": [],
+      "id": "b01e768f5199740f1b6ff89187cc81b9e",
+      "comment": null,
+      "position_x": -186.89999389648438,
+      "position_y": -28,
+      "result": null,
+      "type": "literal",
+      "value": 3
+    },
+    {
+      "arguments": [],
+      "id": "h78279fd2507d4cbf80597464ae8b52b1",
+      "comment": null,
+      "position_x": -172.89999389648438,
+      "position_y": 112,
+      "result": null,
+      "type": "param",
+      "name": "x"
+    },
+    {
+      "arguments": [],
+      "id": "k180249def78d47eeb5153f320ed51f8b",
+      "comment": null,
+      "position_x": -194.89999389648438,
+      "position_y": -147,
+      "result": null,
+      "type": "literal",
+      "value": 2
+    },
+    {
+      "arguments": [],
+      "id": "kded4ee9a66bb43e4bdd10a3a0ff41c14",
+      "comment": null,
+      "position_x": -169.89999389648438,
+      "position_y": 284,
+      "result": null,
+      "type": "literal",
+      "value": 4
+    },
+    {
+      "arguments": ["b01e768f5199740f1b6ff89187cc81b9e"],
+      "id": "mc79789c826ed4854a76c0f99cf9be7fc",
+      "comment": null,
+      "position_x": 7.100006103515625,
+      "position_y": -50,
+      "result": 24,
+      "type": "call",
+      "fnNodeId": "fndefn1st"
+    },
+    {
+      "arguments": [],
+      "id": "o8488949695f142179ebd36e1c4016ac7",
+      "comment": null,
+      "position_x": -152.89999389648438,
+      "position_y": 196,
+      "result": null,
+      "type": "literal",
+      "value": 2
+    },
+    {
+      "arguments": [
+        "o8488949695f142179ebd36e1c4016ac7",
+        "kded4ee9a66bb43e4bdd10a3a0ff41c14",
+        "h78279fd2507d4cbf80597464ae8b52b1"
+      ],
+      "id": "q7f2ba491475647478f7f879e2a1270e4",
+      "comment": null,
+      "position_x": 61.100006103515625,
+      "position_y": 194,
+      "result": null,
+      "type": "call",
+      "fnNodeId": "product"
+    },
+    {
+      "arguments": ["a986be2458d9e4913a1786a880ba32ff0"],
+      "id": "qe806ae5b0ccf463893879b8574ec3db5",
+      "comment": null,
+      "position_x": 458.1000061035156,
+      "position_y": -140,
+      "result": 40,
+      "type": "fn",
+      "name": "2nd"
+    },
+    {
+      "arguments": ["q7f2ba491475647478f7f879e2a1270e4"],
+      "id": "fndefn1st",
+      "comment": null,
+      "position_x": 276.1000061035156,
+      "position_y": 195,
+      "result": null,
+      "type": "fn",
+      "name": "1st"
+    },
+    {
+      "arguments": ["k180249def78d47eeb5153f320ed51f8b"],
+      "id": "x66b372842949445f9e9b317b3c1e6a57",
+      "comment": null,
+      "position_x": 19.100006103515625,
+      "position_y": -139,
+      "result": 16,
+      "type": "call",
+      "fnNodeId": "fndefn1st"
+    }
+  ]
+}

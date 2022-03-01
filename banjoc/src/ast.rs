@@ -4,7 +4,7 @@ use serde::{Deserialize, Deserializer};
 
 use crate::error::BanjoError;
 
-type NodeId = String;
+pub type NodeId = String;
 
 #[derive(Deserialize, Debug)]
 pub struct Ast {
@@ -16,7 +16,7 @@ impl Ast {
     pub fn get_node(&self, node_id: &str) -> Result<&Node, BanjoError> {
         self.nodes
             .get(node_id)
-            .ok_or_else(|| BanjoError::compile(format!("Unknown node id {node_id}.")))
+            .ok_or_else(|| BanjoError::compile(node_id, format!("Unknown node id {node_id}.")))
     }
 
     pub fn get_definitions(&self) -> impl Iterator<Item = &Node> {

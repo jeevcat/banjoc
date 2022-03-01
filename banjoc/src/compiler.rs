@@ -53,22 +53,23 @@ impl<'ast> Compiler<'ast> {
                 return Ok(());
             }
             if in_branch.contains(node.id.as_str()) {
-                return BanjoError::compile_err("Detected cycle");
+                return BanjoError::compile_err(&node.id, "Detected cycle");
             }
 
             in_branch.insert(node.id.as_str());
 
-            match node.node_type {
-                NodeType::FunctionDefinition { .. } => *arity = 0,
-                NodeType::Param => *arity += 1,
-                _ => {}
+            if let NodeType::Param = node.node_type {
+                *arity += 1
             }
+
+            let mut errors = BanjoError::CompileErrors(vec![]);
 
             for child in node.dependencies() {
                 // We shoud ignore missing nodes as they could reference native functions
                 // Besides, the error will surface later if a non-native function is incorrectly referenced
                 if let Ok(child_node) = this.ast.get_node(child) {
-                    visit(this, in_branch, compiled, arity, child_node)?;
+                    visit(this, in_branch, compiled, arity, child_node)
+                        .unwrap_or_else(|e| errors.append(e));
                 }
             }
 
@@ -78,35 +79,41 @@ impl<'ast> Compiler<'ast> {
             match &node.node_type {
                 NodeType::FunctionDefinition { arguments } => {
                     if *arity > 0 {
-                        this.node_function_definition(&node.id, arguments, *arity)?
+                        this.node_function_definition(&node.id, arguments, *arity)
+                            .unwrap_or_else(|e| errors.append(e));
                     } else {
                         // Treat a function defn with no parameters as a variable defn, effectively memoizing it
-                        this.node_variable_definition(&node.id, arguments)?
+                        this.node_variable_definition(&node.id, arguments)
+                            .unwrap_or_else(|e| errors.append(e));
                     }
+                    *arity = 0;
                 }
                 NodeType::VariableDefinition { arguments } => {
-                    this.node_variable_definition(&node.id, arguments)?
+                    this.node_variable_definition(&node.id, arguments)
+                        .unwrap_or_else(|e| errors.append(e));
                 }
                 _ => {}
             }
-            Ok(())
+            errors.to_result(())
         }
 
         // Arity of current function
         let mut arity = 0_usize;
 
+        let mut errors = BanjoError::CompileErrors(vec![]);
         for node in self.ast.nodes.values() {
-            visit(self, &mut in_branch, &mut compiled, &mut arity, node)?;
+            visit(self, &mut in_branch, &mut compiled, &mut arity, node)
+                .unwrap_or_else(|e| errors.append(e));
         }
 
         let function = self.pop_func_compiler().function;
 
-        Ok(self.gc.alloc(function))
+        errors.to_result(self.gc.alloc(function))
     }
 
     fn node(&mut self, node: &'ast Node) -> Result<()> {
         match &node.node_type {
-            NodeType::Literal { value } => self.literal(value)?,
+            NodeType::Literal { value } => self.literal(&node.id, value)?,
             NodeType::Param => {
                 // Only declare the param once, but allow same param to be input many times
                 if !self.compiler.is_local_already_in_scope(&node.id) {
@@ -132,7 +139,10 @@ impl<'ast> Compiler<'ast> {
             }
             NodeType::Return { arguments } => {
                 if arguments.len() > 1 {
-                    return BanjoError::compile_err("Return may only have 0 or 1 inputs.");
+                    return BanjoError::compile_err(
+                        &node.id,
+                        "Return may only have 0 or 1 inputs.",
+                    );
                 }
                 if arguments.len() == 1 {
                     let argument = self.ast.get_node(&arguments[0])?;
@@ -149,7 +159,7 @@ impl<'ast> Compiler<'ast> {
                 unary_type,
             } => {
                 if arguments.len() != 1 {
-                    return BanjoError::compile_err("Unary has invalid input.");
+                    return BanjoError::compile_err(&node.id, "Unary has invalid input.");
                 }
                 let argument = self.ast.get_node(&arguments[0])?;
                 self.node(argument)?;
@@ -160,7 +170,7 @@ impl<'ast> Compiler<'ast> {
                 binary_type,
             } => {
                 if arguments.len() != 2 {
-                    return BanjoError::compile_err("Binary has invalid input.");
+                    return BanjoError::compile_err(&node.id, "Binary has invalid input.");
                 }
                 for term in arguments {
                     let term = self.ast.get_node(term)?;
@@ -183,10 +193,10 @@ impl<'ast> Compiler<'ast> {
         arity: usize,
     ) -> Result<()> {
         if arguments.len() != 1 {
-            return BanjoError::compile_err("Function definition has invalid input.");
+            return BanjoError::compile_err(node_id, "Function definition has invalid input.");
         }
         if arity > 255 {
-            return BanjoError::compile_err("Can't have more than 255 parameters.");
+            return BanjoError::compile_err(node_id, "Can't have more than 255 parameters.");
         }
         let body_node = self.ast.get_node(&arguments[0])?;
         self.fun_declaration(body_node, node_id, arity)?;
@@ -195,7 +205,7 @@ impl<'ast> Compiler<'ast> {
 
     fn node_variable_definition(&mut self, node_id: &'ast str, arguments: &[String]) -> Result<()> {
         if arguments.len() != 1 {
-            return BanjoError::compile_err("Variable definition has invalid input.");
+            return BanjoError::compile_err(node_id, "Variable definition has invalid input.");
         }
 
         let body_node = self.ast.get_node(&arguments[0])?;
@@ -234,14 +244,14 @@ impl<'ast> Compiler<'ast> {
         }
     }
 
-    fn literal(&mut self, value: &LiteralType) -> Result<()> {
+    fn literal(&mut self, node_id: &str, value: &LiteralType) -> Result<()> {
         match value {
             LiteralType::Bool(b) => self.emit(if *b { OpCode::True } else { OpCode::False }),
             LiteralType::Nil => self.emit(OpCode::Nil),
-            LiteralType::Number(n) => self.emit_constant(Value::Number(*n))?,
+            LiteralType::Number(n) => self.emit_constant(node_id, Value::Number(*n))?,
             LiteralType::String(s) => {
                 let value = Value::String(self.gc.intern(s));
-                self.emit_constant(value)?;
+                self.emit_constant(node_id, value)?;
             }
         }
         Ok(())
@@ -289,7 +299,7 @@ impl<'ast> Compiler<'ast> {
         let FuncCompiler { function, .. } = self.pop_func_compiler();
         let value = Value::Function(self.gc.alloc(function));
 
-        let constant = self.make_constant(value)?;
+        let constant = self.make_constant(node_id, value)?;
         self.emit(OpCode::Function(constant));
         Ok(())
     }
@@ -332,7 +342,10 @@ impl<'ast> Compiler<'ast> {
         debug_assert!(self.compiler.is_local_scope());
 
         if self.compiler.is_local_already_in_scope(node_id) {
-            return BanjoError::compile_err("Already a variable with this name in this scope.");
+            return BanjoError::compile_err(
+                node_id,
+                "Already a variable with this name in this scope.",
+            );
         }
 
         self.compiler.add_local(node_id)
@@ -351,7 +364,7 @@ impl<'ast> Compiler<'ast> {
 
     fn identifier_constant(&mut self, node_id: &str) -> Result<Constant> {
         let value = Value::String(self.gc.intern(node_id));
-        self.make_constant(value)
+        self.make_constant(node_id, value)
     }
 
     fn push_func_compiler(&mut self, func_id: &str, arity: usize) {
@@ -394,18 +407,18 @@ impl<'ast> Compiler<'ast> {
         self.current_chunk().write(opcode);
     }
 
-    fn emit_constant(&mut self, value: Value) -> Result<()> {
-        let slot = self.make_constant(value)?;
+    fn emit_constant(&mut self, node_id: &str, value: Value) -> Result<()> {
+        let slot = self.make_constant(node_id, value)?;
         self.emit(OpCode::Constant(slot));
         Ok(())
     }
 
-    fn make_constant(&mut self, value: Value) -> Result<Constant> {
+    fn make_constant(&mut self, node_id: &str, value: Value) -> Result<Constant> {
         let constant = self.current_chunk().add_constant(value);
         if constant > u8::MAX.into() {
             // TODO we'd want to add another instruction like OpCode::Constant16 which
             // stores the index as a two-byte operand when this limit is hit
-            return BanjoError::compile_err("Too many constants in one chunk.");
+            return BanjoError::compile_err(node_id, "Too many constants in one chunk.");
         }
         Ok(Constant {
             slot: constant.try_into().unwrap(),
@@ -416,7 +429,10 @@ impl<'ast> Compiler<'ast> {
         // We can preview the result only if we're in a function which isn't parameterized
         if self.compiler.function.arity == 0 {
             if self.output_nodes.len() >= 255 {
-                return BanjoError::compile_err("Can't preview the output of more than 255 nodes");
+                return BanjoError::compile_err(
+                    node_id,
+                    "Can't preview the output of more than 255 nodes",
+                );
             }
             self.output_nodes.push(node_id);
             let output_index = (self.output_nodes.len() - 1) as u8;
