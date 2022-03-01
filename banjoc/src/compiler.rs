@@ -70,7 +70,7 @@ impl<'ast> Compiler<'ast> {
 
             let mut errors = BanjoError::CompileErrors(vec![]);
 
-            for child in node.dependencies() {
+            for child in node.dependencies().chain(node.arguments()) {
                 // We shoud ignore missing nodes as they could reference native functions
                 // Besides, the error will surface later if a non-native function is incorrectly referenced
                 if let Ok(child_node) = this.ast.get_node(child) {
@@ -203,7 +203,7 @@ impl<'ast> Compiler<'ast> {
             }
             NodeType::FunctionDefinition { .. } | NodeType::VariableDefinition { .. } => {
                 // Should only be called via topological sort in Self::compile()
-                unreachable!();
+                unreachable!("Should only be called via topological sort in Self::compile()");
             }
         }
         Ok(())
@@ -285,7 +285,7 @@ impl<'ast> Compiler<'ast> {
     }
 
     fn named_variable(&mut self, node_id: &'ast str) -> Result<()> {
-        let get_opcode = {
+        let opcode = {
             if let Some(index) = self.compiler.resolve_local(node_id)? {
                 OpCode::GetLocal(index)
             } else {
@@ -294,7 +294,7 @@ impl<'ast> Compiler<'ast> {
             }
         };
 
-        self.emit(get_opcode);
+        self.emit(opcode);
         Ok(())
     }
 

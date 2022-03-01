@@ -126,40 +126,12 @@ impl Node {
         .map(String::as_str)
     }
     pub fn dependencies(&self) -> impl Iterator<Item = &str> {
-        // https://stackoverflow.com/a/54728634/4514393
-        let mut iter_a = None;
-        let mut iter_b = None;
-        let mut iter_c = None;
         match &self.node_type {
-            NodeType::Literal { .. } | NodeType::Param => {}
-            NodeType::FunctionDefinition { arguments }
-            | NodeType::VariableDefinition { arguments }
-            | NodeType::Return { arguments }
-            | NodeType::Unary { arguments, .. }
-            | NodeType::Binary { arguments, .. } => {
-                iter_a = Some(arguments.iter().map(String::as_str))
-            }
-            NodeType::VariableReference { var_node_id } => {
-                iter_b = Some(std::iter::once(var_node_id.as_str()))
-            }
-            NodeType::FunctionCall {
-                arguments,
-                fn_node_id,
-            } => {
-                iter_c = Some(
-                    arguments
-                        .iter()
-                        .map(String::as_str)
-                        .chain(std::iter::once(fn_node_id.as_str())),
-                )
-            }
+            NodeType::VariableReference { var_node_id } => Some(var_node_id.as_str()),
+            NodeType::FunctionCall { fn_node_id, .. } => Some(fn_node_id.as_str()),
+            _ => None,
         }
-        iter_a.into_iter().flatten().chain(
-            iter_b
-                .into_iter()
-                .flatten()
-                .chain(iter_c.into_iter().flatten()),
-        )
+        .into_iter()
     }
 }
 
