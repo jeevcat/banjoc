@@ -5,8 +5,8 @@ use crate::ast::NodeId;
 pub type Result<T> = std::result::Result<T, BanjoError>;
 #[derive(Debug)]
 pub enum BanjoError {
-    CompileError((String, String)),
-    CompileErrors(Vec<(String, String)>),
+    CompileError((NodeId, String)),
+    CompileErrors(Vec<(NodeId, String)>),
     RuntimeError(String),
 }
 
@@ -17,6 +17,12 @@ impl BanjoError {
     pub fn compile_err<T, N: Into<String>, M: Into<String>>(node_id: N, msg: M) -> Result<T> {
         Err(Self::compile(node_id, msg))
     }
+    pub fn runtime<M: Into<String>>(msg: M) -> Self {
+        Self::RuntimeError(msg.into())
+    }
+    pub fn runtime_err<T, M: Into<String>>(msg: M) -> Result<T> {
+        Err(Self::runtime(msg))
+    }
     pub fn append(&mut self, other: Self) {
         match self {
             BanjoError::CompileErrors(this) => match other {
@@ -24,7 +30,7 @@ impl BanjoError {
                 BanjoError::CompileErrors(mut other) => this.append(&mut other),
                 BanjoError::RuntimeError(_) => {}
             },
-            BanjoError::CompileError(_) | BanjoError::RuntimeError(_) => {}
+            BanjoError::CompileError(_) | &mut BanjoError::RuntimeError(_) => {}
         }
     }
     pub fn to_result<T>(self, value: T) -> Result<T> {

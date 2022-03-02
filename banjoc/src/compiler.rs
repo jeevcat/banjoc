@@ -56,7 +56,8 @@ impl<'ast> Compiler<'ast> {
 
             for child in node.dependencies().chain(node.arguments()) {
                 // We shoud ignore missing nodes as they could reference native functions
-                // Besides, the error will surface later if a non-native function is incorrectly referenced
+                // Besides, the error will surface later if a non-native function is incorrectly
+                // referenced
                 if let Ok(child_node) = this.ast.get_node(child) {
                     visit(this, in_branch, visited, child_node)
                         .unwrap_or_else(|e| errors.append(e));
@@ -72,7 +73,8 @@ impl<'ast> Compiler<'ast> {
                     if arity > 0 {
                         this.node_function_definition(&node.id, arguments, arity)
                     } else {
-                        // Treat a function defn with no parameters as a variable defn, effectively memoizing it
+                        // Treat a function defn with no parameters as a variable defn, effectively
+                        // memoizing it
                         this.node_variable_definition(&node.id, arguments)
                     }
                 }
@@ -136,7 +138,8 @@ impl<'ast> Compiler<'ast> {
                 fn_node_id,
             } => {
                 self.named_variable(fn_node_id)?;
-                // Functions are compiled as variables if they have no parameters, so skip calling them if arity == 0
+                // Functions are compiled as variables if they have no parameters, so skip
+                // calling them if arity == 0
                 if self.get_arity(fn_node_id) > 0 {
                     self.call(arguments)?;
                 }
@@ -414,7 +417,8 @@ impl<'ast> Compiler<'ast> {
     }
 
     fn output(&mut self, node_id: &'ast str) -> Result<()> {
-        // We can preview the result only if we're in a function which isn't parameterized
+        // We can preview the result only if we're in a function which isn't
+        // parameterized
         if self.compiler.function.arity == 0 {
             if self.output_nodes.len() >= 255 {
                 return BanjoError::compile_err(

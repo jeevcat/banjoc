@@ -50,7 +50,7 @@ impl Vm {
             Ok(Value::Number(
                 SystemTime::now()
                     .duration_since(UNIX_EPOCH)
-                    .map_err(|e| BanjoError::RuntimeError(e.to_string()))?
+                    .map_err(|e| BanjoError::runtime(e.to_string()))?
                     .as_secs_f64(),
             ))
         });
@@ -58,9 +58,7 @@ impl Vm {
             args.iter()
                 .copied()
                 .reduce(|accum, item| accum.add(item, vm).unwrap_or(accum))
-                .ok_or_else(|| {
-                    BanjoError::RuntimeError("Expected at least 1 argument.".to_string())
-                })
+                .ok_or_else(|| BanjoError::runtime("Expected at least 1 argument."))
         });
         vm.define_native("product", |args, _| {
             args.iter()
@@ -70,9 +68,7 @@ impl Vm {
                         .binary_op(item, |a, b| Value::Number(a * b))
                         .unwrap_or(accum)
                 })
-                .ok_or_else(|| {
-                    BanjoError::RuntimeError("Expected at least 1 argument.".to_string())
-                })
+                .ok_or_else(|| BanjoError::runtime("Expected at least 1 argument."))
         });
 
         vm
@@ -128,7 +124,7 @@ impl Vm {
                 OpCode::Add => {
                     let b = *self.stack.peek(0);
                     let a = *self.stack.peek(1);
-                    let result = a.add(b, self)?;
+                    let result = a.add(b, self).map_err(|e| self.add_stacktrace(e))?;
                     self.stack.push(result);
                 }
                 // Load constant/function onto the stack
@@ -184,7 +180,7 @@ impl Vm {
                     if let Some(value) = self.globals.get(name) {
                         self.stack.push(value);
                     } else {
-                        self.runtime_error(&format!("Undefined variable '{}'.", name.as_str()))?;
+                        self.runtime_error(format!("Undefined variable '{}'.", name.as_str()))?;
                     }
                 }
                 OpCode::GetLocal(offset) => {
@@ -248,7 +244,7 @@ impl Vm {
 
     fn call(&mut self, callee: GcRef<Function>, arg_count: usize) -> Result<()> {
         if arg_count != callee.arity {
-            return self.runtime_error(&format!(
+            return self.runtime_error(format!(
                 "Expected {} arguments but got {}.",
                 callee.arity, arg_count
             ));
@@ -263,17 +259,28 @@ impl Vm {
         Ok(())
     }
 
-    fn runtime_error(&self, message: &str) -> Result<()> {
-        eprintln!("{}", message);
-
+    fn make_stacktrace<M: Into<String>>(&self, message: M) -> String {
         // Print callstack
+        let mut error_str = message.into();
         for i in (0..self.frames.len()).rev() {
             let frame = self.frames.read(i);
             let closure = frame.function;
-            eprintln!("in {}", *closure);
+            error_str += &format!("in {}", *closure);
         }
+        error_str
+    }
 
-        Err(BanjoError::RuntimeError(message.to_string()))
+    fn runtime_error<M: Into<String>>(&self, message: M) -> Result<()> {
+        BanjoError::runtime_err(self.make_stacktrace(message))
+    }
+
+    fn add_stacktrace(&self, error: BanjoError) -> BanjoError {
+        match error {
+            BanjoError::RuntimeError(message) => {
+                BanjoError::RuntimeError(self.make_stacktrace(message))
+            }
+            _ => error,
+        }
     }
 
     fn define_native(&mut self, name: &str, function: NativeFn) {

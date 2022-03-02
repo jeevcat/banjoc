@@ -41,18 +41,14 @@ impl Value {
                 a.as_str(),
                 b.as_str()
             )))),
-            _ => Err(BanjoError::RuntimeError(
-                "Operands must be two numbers or two strings.".to_string(),
-            )),
+            _ => BanjoError::runtime_err("Operands must be two numbers or two strings."),
         }
     }
 
     pub fn binary_op(self, rhs: Self, f: impl Fn(f64, f64) -> Value) -> Result<Self> {
         match (self, rhs) {
             (Value::Number(a), Value::Number(b)) => Ok(f(a, b)),
-            _ => Err(BanjoError::RuntimeError(
-                "Operands must be numbers.".to_string(),
-            )),
+            _ => BanjoError::runtime_err("Operands must be numbers."),
         }
     }
 }
