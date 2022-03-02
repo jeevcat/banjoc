@@ -28,7 +28,7 @@ pub enum NodeType {
     FunctionDefinition {
         arguments: Vec<NodeId>,
     },
-    #[serde(alias = "ref")]
+    #[serde(alias = "ref", rename_all = "camelCase")]
     VariableReference {
         var_node_id: NodeId,
     },
