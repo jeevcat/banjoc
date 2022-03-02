@@ -142,23 +142,6 @@ impl<'ast> Compiler<'ast> {
                 }
                 self.output(&node.id)?;
             }
-            NodeType::Return { arguments } => {
-                if arguments.len() > 1 {
-                    return BanjoError::compile_err(
-                        &node.id,
-                        "Return may only have 0 or 1 inputs.",
-                    );
-                }
-                if arguments.len() == 1 {
-                    let argument = self.ast.get_node(&arguments[0])?;
-                    self.node(argument)?;
-                } else {
-                    self.emit(OpCode::Nil);
-                }
-                self.emit(OpCode::Return);
-                self.output(&node.id)?;
-            }
-
             NodeType::Unary {
                 arguments,
                 unary_type,

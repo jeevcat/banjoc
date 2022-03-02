@@ -37,9 +37,6 @@ pub enum NodeType {
         arguments: Vec<NodeId>,
     },
     Param,
-    Return {
-        arguments: Vec<NodeId>,
-    },
     Unary {
         unary_type: UnaryType,
         arguments: Vec<NodeId>,
@@ -99,7 +96,6 @@ impl Node {
         match &self.node_type {
             NodeType::FunctionDefinition { arguments, .. }
             | NodeType::VariableDefinition { arguments }
-            | NodeType::Return { arguments }
             | NodeType::Unary { arguments, .. }
             | NodeType::FunctionCall { arguments, .. }
             | NodeType::Binary { arguments, .. } => arguments.as_slice(),
