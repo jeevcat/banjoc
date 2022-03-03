@@ -15,10 +15,11 @@ use crate::{
 };
 
 pub struct Compiler<'ast> {
-    // TODO: this should be an option
-    compiler: Box<FuncCompiler<'ast>>,
+    /// Needed so we can allocated functions and interned strings
     gc: &'ast mut Gc,
     ast: &'ast Ast,
+    // TODO: this should be an option
+    compiler: Box<FuncCompiler<'ast>>,
     arities: HashMap<&'ast str, usize>,
     /// IDs of nodes in order of compilation
     pub output_nodes: Vec<&'ast str>,
@@ -297,7 +298,7 @@ impl<'ast> Compiler<'ast> {
 
     fn function(&mut self, body_node: &'ast Node, node_id: &str, arity: usize) -> Result<()> {
         self.push_func_compiler(node_id, arity);
-        self.begin_scope();
+        self.compiler.begin_scope();
 
         self.node(body_node)?;
 
@@ -404,10 +405,6 @@ impl<'ast> Compiler<'ast> {
             let compiler = mem::replace(&mut self.compiler, Box::new(FuncCompiler::new(None, 0)));
             *compiler
         }
-    }
-
-    fn begin_scope(&mut self) {
-        self.compiler.begin_scope();
     }
 
     fn emit(&mut self, opcode: OpCode) {
