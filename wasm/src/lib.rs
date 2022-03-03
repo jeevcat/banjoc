@@ -27,9 +27,9 @@ pub fn interpret(source: JsValue) -> Result<JsValue, JsValue> {
                 JsValue::from_str(&format!("compile error: [{node_id}] {msg}"))
             }
             BanjoError::CompileErrors(errors) => {
-                let mut s = String::new();
+                let mut s = "compile errors:".to_owned();
                 for (node_id, msg) in errors {
-                    s += &format!("compile error: [{node_id}] {msg}");
+                    s += &format!("\n[{node_id}] {msg}");
                 }
                 JsValue::from_str(&s)
             }

@@ -1,0 +1,64 @@
+{
+  "nodes": [
+    {
+      "arguments": ["zce14810fcce74bd798292d9307135635", "yf8d382a288d4407696a411d1b62f2174"],
+      "id": "le7a7169b3a1e49d5a44f6e82dcafb85b",
+      "comment": null,
+      "position_x": 567.1999969482422,
+      "position_y": 87,
+      "result": null,
+      "type": "call",
+      "fnNodeId": "sum"
+    },
+    {
+      "arguments": [],
+      "id": "neef09af33aa44857b6a7195c0c37d0b7",
+      "comment": null,
+      "position_x": 796.1999969482422,
+      "position_y": 339,
+      "result": null,
+      "type": "literal",
+      "value": 5
+    },
+    {
+      "arguments": ["le7a7169b3a1e49d5a44f6e82dcafb85b"],
+      "id": "nf154e4edef20492bb82142177b008b67",
+      "comment": null,
+      "position_x": 757.1999969482422,
+      "position_y": 117,
+      "result": null,
+      "type": "fn",
+      "name": "new_function"
+    },
+    {
+      "arguments": [],
+      "id": "u9d3cd146026a4d89b197a03b530fd657",
+      "comment": null,
+      "position_x": 922.1999969482422,
+      "position_y": 336,
+      "result": null,
+      "type": "call",
+      "fnNodeId": "nf154e4edef20492bb82142177b008b67"
+    },
+    {
+      "arguments": [],
+      "id": "yf8d382a288d4407696a411d1b62f2174",
+      "comment": null,
+      "position_x": 356.1999969482422,
+      "position_y": 163,
+      "result": null,
+      "type": "param",
+      "name": "oh"
+    },
+    {
+      "arguments": [],
+      "id": "zce14810fcce74bd798292d9307135635",
+      "comment": null,
+      "position_x": 415.1999969482422,
+      "position_y": 86,
+      "result": null,
+      "type": "literal",
+      "value": 9
+    }
+  ]
+}

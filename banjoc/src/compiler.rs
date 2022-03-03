@@ -69,7 +69,14 @@ impl<'ast> Compiler<'ast> {
 
             match &node.node_type {
                 NodeType::FunctionDefinition { arguments, .. } => {
-                    let arity = this.get_arity(&node.id);
+                    if arguments.len() != 1 {
+                        return BanjoError::compile_err(
+                            &node.id,
+                            "Function definition requires exactly 1 input.",
+                        );
+                    }
+
+                    let arity = *this.get_arity(&node.id).unwrap_or(&256);
                     if arity > 0 {
                         this.node_function_definition(&node.id, arguments, arity)
                     } else {
@@ -79,6 +86,13 @@ impl<'ast> Compiler<'ast> {
                     }
                 }
                 NodeType::VariableDefinition { arguments } => {
+                    if arguments.len() != 1 {
+                        return BanjoError::compile_err(
+                            &node.id,
+                            "Variable definition requires exactly 1 input.",
+                        );
+                    }
+
                     this.node_variable_definition(&node.id, arguments)
                 }
                 _ => Ok(()),
@@ -140,7 +154,16 @@ impl<'ast> Compiler<'ast> {
                 self.named_variable(fn_node_id)?;
                 // Functions are compiled as variables if they have no parameters, so skip
                 // calling them if arity == 0
-                if self.get_arity(fn_node_id) > 0 {
+                let arity = self.get_arity(fn_node_id);
+                if let Some(arity) = arity {
+                    if *arity != arguments.len() {
+                        return BanjoError::compile_err(
+                            &node.id,
+                            format!("Expected {} arguments but got {}.", arity, arguments.len()),
+                        );
+                    }
+                }
+                if *arity.unwrap_or(&256) > 0 {
                     self.call(arguments)?;
                 }
                 self.output(&node.id)?;
@@ -183,9 +206,6 @@ impl<'ast> Compiler<'ast> {
         arguments: &[String],
         arity: usize,
     ) -> Result<()> {
-        if arguments.len() != 1 {
-            return BanjoError::compile_err(node_id, "Function definition has invalid input.");
-        }
         if arity > 255 {
             return BanjoError::compile_err(node_id, "Can't have more than 255 parameters.");
         }
@@ -195,10 +215,6 @@ impl<'ast> Compiler<'ast> {
     }
 
     fn node_variable_definition(&mut self, node_id: &'ast str, arguments: &[String]) -> Result<()> {
-        if arguments.len() != 1 {
-            return BanjoError::compile_err(node_id, "Variable definition has invalid input.");
-        }
-
         let body_node = self.ast.get_node(&arguments[0])?;
         self.var_declaration(body_node, node_id)?;
         Ok(())
@@ -434,7 +450,7 @@ impl<'ast> Compiler<'ast> {
         Ok(())
     }
 
-    fn get_arity(&self, fn_node_id: &'ast str) -> usize {
+    fn get_arity(&self, fn_node_id: &'ast str) -> Option<&usize> {
         #[cfg(debug_assertions)]
         {
             if let Ok(node) = self.ast.get_node(fn_node_id) {
@@ -445,9 +461,6 @@ impl<'ast> Compiler<'ast> {
             }
         }
 
-        match self.arities.get(fn_node_id) {
-            Some(arity) => *arity,
-            None => u8::MAX as usize + 1,
-        }
+        self.arities.get(fn_node_id)
     }
 }

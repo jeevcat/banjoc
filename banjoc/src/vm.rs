@@ -58,7 +58,7 @@ impl Vm {
             args.iter()
                 .copied()
                 .reduce(|accum, item| accum.add(item, vm).unwrap_or(accum))
-                .ok_or_else(|| BanjoError::runtime("Expected at least 1 argument."))
+                .ok_or_else(|| BanjoError::runtime("Sum: expected at least 1 argument."))
         });
         vm.define_native("product", |args, _| {
             args.iter()
@@ -68,7 +68,7 @@ impl Vm {
                         .binary_op(item, |a, b| Value::Number(a * b))
                         .unwrap_or(accum)
                 })
-                .ok_or_else(|| BanjoError::runtime("Expected at least 1 argument."))
+                .ok_or_else(|| BanjoError::runtime("Product: expected at least 1 argument."))
         });
 
         vm
@@ -232,7 +232,7 @@ impl Vm {
         match callee {
             Value::NativeFunction(callee) => {
                 let args = self.stack.pop_n(arg_count);
-                let result = (callee.function)(args, self)?;
+                let result = (callee.function)(args, self).map_err(|e| self.add_stacktrace(e))?;
                 self.stack.pop();
                 self.stack.push(result);
                 Ok(())
@@ -265,7 +265,7 @@ impl Vm {
         for i in (0..self.frames.len()).rev() {
             let frame = self.frames.read(i);
             let closure = frame.function;
-            error_str += &format!("in {}", *closure);
+            error_str += &format!("\nin {}", *closure);
         }
         error_str
     }
