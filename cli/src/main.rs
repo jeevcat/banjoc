@@ -40,7 +40,7 @@ fn run_file(vm: &mut Vm, path: &str) {
     match interpret(vm, &source) {
         Ok(result) => println!("{:#?}", result),
         Err(error) => match error {
-            BanjoError::CompileError((node_id, e)) => {
+            BanjoError::CompileNode((node_id, e)) => {
                 eprint!("{node_id}: {e}");
                 process::exit(65);
             }
@@ -50,18 +50,19 @@ fn run_file(vm: &mut Vm, path: &str) {
                 }
                 process::exit(65);
             }
-            BanjoError::RuntimeError(e) => {
+            BanjoError::Runtime(e) => {
                 eprintln!("{e}");
                 process::exit(70);
             }
+            BanjoError::Compile(e) => panic!("Compile error without node information {e}"),
         },
     }
 }
 
 fn interpret(vm: &mut Vm, source: &str) -> Result<NodeOutputs> {
     let now = Instant::now();
-    let source: Ast = from_str(source)
-        .map_err(|e| BanjoError::compile("any", &format!("JSON parsing error: {e}")))?;
+    let source: Ast =
+        from_str(source).map_err(|e| BanjoError::Compile(format!("JSON parsing error: {e}")))?;
     println!("Parsing took {:.0?}", now.elapsed());
     vm.interpret(source)
 }

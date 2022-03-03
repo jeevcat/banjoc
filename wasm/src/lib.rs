@@ -23,7 +23,7 @@ pub fn interpret(source: JsValue) -> Result<JsValue, JsValue> {
     set_panic_hook();
     parse_interpret(source)
         .map_err(|e| match e {
-            BanjoError::CompileError((node_id, msg)) => {
+            BanjoError::CompileNode((node_id, msg)) => {
                 JsValue::from_str(&format!("compile error: [{node_id}] {msg}"))
             }
             BanjoError::CompileErrors(errors) => {
@@ -33,7 +33,8 @@ pub fn interpret(source: JsValue) -> Result<JsValue, JsValue> {
                 }
                 JsValue::from_str(&s)
             }
-            BanjoError::RuntimeError(msg) => JsValue::from_str(&format!("runtime error: {msg}")),
+            BanjoError::Runtime(msg) => JsValue::from_str(&format!("runtime error: {msg}")),
+            BanjoError::Compile(e) => panic!("Compile error without node information {e}"),
         })
         .map(|value| {
             let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
@@ -46,6 +47,6 @@ pub fn interpret(source: JsValue) -> Result<JsValue, JsValue> {
 fn parse_interpret(source: JsValue) -> Result<NodeOutputs, BanjoError> {
     let mut vm = Vm::new();
     let source: Ast = serde_wasm_bindgen::from_value(source)
-        .map_err(|e| BanjoError::compile("any", &format!("JSON parsing error: {e}")))?;
+        .map_err(|e| BanjoError::Compile(format!("JSON parsing error: {e}")))?;
     vm.interpret(source)
 }

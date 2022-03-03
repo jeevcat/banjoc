@@ -80,7 +80,7 @@ impl Vm {
     ///
     /// This function can return both compile and runtime errors.
     pub fn interpret(&mut self, ast: Ast) -> Result<NodeOutputs> {
-        let mut compiler: Compiler = Compiler::new(&ast, &mut self.gc);
+        let mut compiler: Compiler<'_> = Compiler::new(&ast, &mut self.gc);
         let function = compiler.compile()?;
 
         // TODO surely I can avoid this somehow, but it hurts my head :(
@@ -276,9 +276,7 @@ impl Vm {
 
     fn add_stacktrace(&self, error: BanjoError) -> BanjoError {
         match error {
-            BanjoError::RuntimeError(message) => {
-                BanjoError::RuntimeError(self.make_stacktrace(message))
-            }
+            BanjoError::Runtime(message) => BanjoError::Runtime(self.make_stacktrace(message)),
             _ => error,
         }
     }

@@ -4,9 +4,8 @@ use std::{
 };
 
 use crate::{
-    ast::{Ast, BinaryType, LiteralType, Node, NodeType, UnaryType},
-    chunk::Chunk,
-    error::{BanjoError, Result},
+    ast::{Ast, Node, NodeType},
+    error::{BanjoError, Context, Result},
     func_compiler::FuncCompiler,
     gc::{Gc, GcRef},
     obj::Function,
@@ -23,6 +22,12 @@ pub struct Compiler<'ast> {
     arities: HashMap<&'ast str, usize>,
     /// IDs of nodes in order of compilation
     pub output_nodes: Vec<&'ast str>,
+}
+
+macro_rules! current_chunk {
+    ($self:ident) => {
+        $self.compiler.function.chunk
+    };
 }
 
 impl<'ast> Compiler<'ast> {
@@ -130,12 +135,15 @@ impl<'ast> Compiler<'ast> {
 
         let function = self.pop_func_compiler().function;
 
+        // TODO need to return BOTH errors and function here
         errors.to_result(self.gc.alloc(function))
     }
 
     fn node(&mut self, node: &'ast Node) -> Result<()> {
         match &node.node_type {
-            NodeType::Literal { value } => self.literal(&node.id, value)?,
+            NodeType::Literal { value } => current_chunk!(self)
+                .literal(self.gc, value)
+                .node_context(&node.id)?,
             NodeType::Param => {
                 // Only declare the param once, but allow same param to be input many times
                 if !self.compiler.is_local_already_in_scope(&node.id) {
@@ -178,7 +186,7 @@ impl<'ast> Compiler<'ast> {
                 }
                 let argument = self.ast.get_node(&arguments[0])?;
                 self.node(argument)?;
-                self.emit_unary(unary_type);
+                current_chunk!(self).emit_unary(unary_type);
             }
             NodeType::Binary {
                 arguments,
@@ -191,7 +199,7 @@ impl<'ast> Compiler<'ast> {
                     let term = self.ast.get_node(term)?;
                     self.node(term)?;
                 }
-                self.emit_binary(binary_type);
+                current_chunk!(self).emit_binary(binary_type);
             }
             NodeType::FunctionDefinition { .. } | NodeType::VariableDefinition { .. } => {
                 // Should only be called via topological sort in Self::compile()
@@ -221,54 +229,6 @@ impl<'ast> Compiler<'ast> {
         Ok(())
     }
 
-    fn emit_unary(&mut self, unary_type: &UnaryType) {
-        // Emit the operator instruction.
-        match unary_type {
-            UnaryType::Negate => self.emit(OpCode::Negate),
-            UnaryType::Not => self.emit(OpCode::Not),
-        }
-    }
-
-    fn emit_binary(&mut self, binary_type: &BinaryType) {
-        // Compile the operator
-        match binary_type {
-            BinaryType::Subtract => self.emit(OpCode::Subtract),
-            BinaryType::Divide => self.emit(OpCode::Divide),
-            BinaryType::Equals => self.emit(OpCode::Equal),
-            BinaryType::Greater => self.emit(OpCode::Greater),
-            BinaryType::Less => self.emit(OpCode::Less),
-            BinaryType::NotEquals => {
-                self.emit(OpCode::Equal);
-                self.emit(OpCode::Not);
-            }
-            BinaryType::GreaterEqual => {
-                self.emit(OpCode::Less);
-                self.emit(OpCode::Not);
-            }
-            BinaryType::LessEqual => {
-                self.emit(OpCode::Greater);
-                self.emit(OpCode::Not);
-            }
-        }
-    }
-
-    fn literal(&mut self, node_id: &str, value: &LiteralType) -> Result<()> {
-        match value {
-            LiteralType::Bool(b) => self.emit(if *b { OpCode::True } else { OpCode::False }),
-            LiteralType::Nil => self.emit(OpCode::Nil),
-            LiteralType::Number(n) => self.emit_constant(node_id, Value::Number(*n))?,
-            LiteralType::String(s) => {
-                let value = Value::String(self.gc.intern(s));
-                self.emit_constant(node_id, value)?;
-            }
-        }
-        Ok(())
-    }
-
-    fn current_chunk(&mut self) -> &mut Chunk {
-        &mut self.compiler.function.chunk
-    }
-
     fn named_variable(&mut self, node_id: &'ast str) -> Result<()> {
         let opcode = {
             if let Some(index) = self.compiler.resolve_local(node_id)? {
@@ -279,7 +239,7 @@ impl<'ast> Compiler<'ast> {
             }
         };
 
-        self.emit(opcode);
+        current_chunk!(self).emit(opcode);
         Ok(())
     }
 
@@ -307,8 +267,10 @@ impl<'ast> Compiler<'ast> {
         let FuncCompiler { function, .. } = self.pop_func_compiler();
         let value = Value::Function(self.gc.alloc(function));
 
-        let constant = self.make_constant(node_id, value)?;
-        self.emit(OpCode::Function(constant));
+        let constant = current_chunk!(self)
+            .make_constant(value)
+            .node_context(node_id)?;
+        current_chunk!(self).emit(OpCode::Function(constant));
         Ok(())
     }
 
@@ -317,7 +279,7 @@ impl<'ast> Compiler<'ast> {
             let arg = self.ast.get_node(arg.as_ref()).unwrap();
             self.node(arg)?;
         }
-        self.emit(OpCode::Call {
+        current_chunk!(self).emit(OpCode::Call {
             arg_count: arg_node_ids.len() as u8,
         });
         Ok(())
@@ -361,7 +323,7 @@ impl<'ast> Compiler<'ast> {
 
     fn define_variable(&mut self, global: Option<Constant>) {
         if let Some(global) = global {
-            self.emit(OpCode::DefineGlobal(global));
+            current_chunk!(self).emit(OpCode::DefineGlobal(global));
         } else {
             // For local variables, we just save references to values on the stack. No need
             // to store them somewhere else like globals do.
@@ -372,7 +334,9 @@ impl<'ast> Compiler<'ast> {
 
     fn identifier_constant(&mut self, node_id: &str) -> Result<Constant> {
         let value = Value::String(self.gc.intern(node_id));
-        self.make_constant(node_id, value)
+        current_chunk!(self)
+            .make_constant(value)
+            .node_context(node_id)
     }
 
     fn push_func_compiler(&mut self, func_id: &str, arity: usize) {
@@ -382,9 +346,9 @@ impl<'ast> Compiler<'ast> {
         self.compiler.enclosing = Some(old_compiler);
     }
 
-    fn pop_func_compiler(&mut self) -> FuncCompiler {
+    fn pop_func_compiler(&mut self) -> FuncCompiler<'_> {
         // #TODO can we include the return in the OpCode::Call?
-        self.emit(OpCode::Return);
+        current_chunk!(self).emit(OpCode::Return);
 
         #[cfg(feature = "debug_print_code")]
         {
@@ -407,28 +371,6 @@ impl<'ast> Compiler<'ast> {
         }
     }
 
-    fn emit(&mut self, opcode: OpCode) {
-        self.current_chunk().write(opcode);
-    }
-
-    fn emit_constant(&mut self, node_id: &str, value: Value) -> Result<()> {
-        let slot = self.make_constant(node_id, value)?;
-        self.emit(OpCode::Constant(slot));
-        Ok(())
-    }
-
-    fn make_constant(&mut self, node_id: &str, value: Value) -> Result<Constant> {
-        let constant = self.current_chunk().add_constant(value);
-        if constant > u8::MAX.into() {
-            // TODO we'd want to add another instruction like OpCode::Constant16 which
-            // stores the index as a two-byte operand when this limit is hit
-            return BanjoError::compile_err(node_id, "Too many constants in one chunk.");
-        }
-        Ok(Constant {
-            slot: constant.try_into().unwrap(),
-        })
-    }
-
     fn output(&mut self, node_id: &'ast str) -> Result<()> {
         // We can preview the result only if we're in a function which isn't
         // parameterized
@@ -441,7 +383,7 @@ impl<'ast> Compiler<'ast> {
             }
             self.output_nodes.push(node_id);
             let output_index = (self.output_nodes.len() - 1) as u8;
-            self.emit(OpCode::Output { output_index });
+            current_chunk!(self).emit(OpCode::Output { output_index });
         }
 
         Ok(())
