@@ -20,7 +20,7 @@ fn repl(vm: &mut Vm) {
             break;
         }
         let result = interpret(vm, &line);
-        println!("{:#?}", result);
+        println!("{}", serde_json::to_string_pretty(&result).unwrap());
     }
 }
 
@@ -32,8 +32,8 @@ fn run_file(vm: &mut Vm, path: &str) {
             process::exit(74);
         }
     };
-    let result = interpret(vm, &source);
-    println!("{:#?}", result);
+    let output = interpret(vm, &source);
+    println!("{}", serde_json::to_string_pretty(&output).unwrap());
 }
 
 fn interpret(vm: &mut Vm, source: &str) -> Output {

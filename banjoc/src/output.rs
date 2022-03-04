@@ -10,7 +10,8 @@ use crate::{
 
 type NodeValues = HashMap<NodeId, Value>;
 
-#[derive(Default, Debug, Serialize)]
+#[derive(Default, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct OutputErrors {
     node_errors: HashMap<NodeId, String>,
     additional_errors: Vec<String>,
@@ -27,9 +28,11 @@ impl OutputErrors {
         }
     }
 }
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Output {
     node_values: NodeValues,
+    #[serde(flatten)]
     errors: OutputErrors,
 }
 
@@ -44,7 +47,7 @@ impl Output {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct OutputValues {
     /// Output values of nodes in order of execution. Indices correspond with
     /// `Compiler::output_nodes`.
