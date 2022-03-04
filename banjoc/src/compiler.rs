@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    mem::{self},
+    mem,
 };
 
 use crate::{
@@ -347,7 +347,6 @@ impl<'ast> Compiler<'ast> {
     }
 
     fn pop_func_compiler(&mut self) -> FuncCompiler<'_> {
-        // #TODO can we include the return in the OpCode::Call?
         current_chunk!(self).emit(OpCode::Return);
 
         #[cfg(feature = "debug_print_code")]

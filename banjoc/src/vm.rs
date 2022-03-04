@@ -95,7 +95,6 @@ impl Vm {
 
         self.call(function, 0)?;
 
-        // TODO remove return
         self.run()?;
 
         let output_values = std::mem::take(&mut self.output_values);
@@ -108,7 +107,7 @@ impl Vm {
     }
 
     // Returning an error from this function (including ?) halts execution
-    fn run(&mut self) -> Result<Value> {
+    fn run(&mut self) -> Result<()> {
         loop {
             #[cfg(feature = "debug_trace_execution")]
             {
@@ -146,8 +145,9 @@ impl Vm {
                     let result = self.stack.pop();
                     let fun_stack_start = self.frames.pop().slot;
                     if self.frames.len() == 0 {
+                        debug_assert!(matches!(result, Value::Function(_)));
                         // Exit interpreter
-                        return Ok(result);
+                        return Ok(());
                     }
                     self.stack.truncate(fun_stack_start);
                     self.stack.push(result);
