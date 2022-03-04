@@ -19,7 +19,7 @@ use crate::{
 
 pub type ValueStack = Stack<Value, { Vm::STACK_MAX }>;
 pub struct Vm {
-    pub gc: Gc,
+    gc: Gc,
     output: Output,
     stack: ValueStack,
     frames: Stack<CallFrame, { Vm::FRAMES_MAX }>,

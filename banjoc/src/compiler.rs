@@ -12,6 +12,7 @@ use crate::{
 };
 
 pub struct Compiler<'ast> {
+    /// The abstract syntax tree to compile
     ast: &'ast Ast<'ast>,
     /// Needed so we can allocate functions and interned strings
     gc: &'ast mut Gc,
