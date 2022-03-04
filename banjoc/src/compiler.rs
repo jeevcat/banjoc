@@ -141,6 +141,12 @@ impl<'ast> Compiler<'ast> {
                 .literal(self.gc, value)
                 .node_context(&node.id)?,
             NodeType::Param => {
+                if !self.compiler.is_local_scope() {
+                    return Error::node_err(
+                        &node.id,
+                        "Can only use param in function declaration.",
+                    );
+                }
                 // Only declare the param once, but allow same param to be input many times
                 if !self.compiler.is_local_already_in_scope(&node.id) {
                     self.declare_local_variable(&node.id)?;
