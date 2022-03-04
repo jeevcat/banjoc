@@ -7,17 +7,18 @@ use crate::{
     gc::{Gc, GcRef},
     obj::Function,
     op_code::{Constant, OpCode},
+    output::Output,
     value::Value,
 };
 
 pub struct Compiler<'ast> {
-    /// Needed so we can allocated functions and interned strings
-    gc: &'ast mut Gc,
     ast: &'ast Ast<'ast>,
+    /// Needed so we can allocate functions and interned strings
+    gc: &'ast mut Gc,
+    /// Needed so we can inform VM of nodes that expect output values
+    output: &'ast mut Output,
     // TODO: this should be an option
     compiler: Box<FuncCompiler<'ast>>,
-    /// IDs of nodes in order of compilation
-    pub output_nodes: Vec<&'ast str>,
 }
 
 macro_rules! current_chunk {
@@ -27,12 +28,12 @@ macro_rules! current_chunk {
 }
 
 impl<'ast> Compiler<'ast> {
-    pub fn new(ast: &'ast Ast<'ast>, gc: &'ast mut Gc) -> Compiler<'ast> {
+    pub fn new(ast: &'ast Ast<'ast>, gc: &'ast mut Gc, output: &'ast mut Output) -> Compiler<'ast> {
         Self {
             compiler: Box::new(FuncCompiler::new(None, 0)),
             gc,
             ast,
-            output_nodes: vec![],
+            output,
         }
     }
 
@@ -368,14 +369,7 @@ impl<'ast> Compiler<'ast> {
         // We can preview the result only if we're in a function which isn't
         // parameterized
         if self.compiler.function.arity == 0 {
-            if self.output_nodes.len() >= 255 {
-                return BanjoError::compile_err(
-                    node_id,
-                    "Can't preview the output of more than 255 nodes",
-                );
-            }
-            self.output_nodes.push(node_id);
-            let output_index = (self.output_nodes.len() - 1) as u8;
+            let output_index = self.output.add_node(node_id)?;
             current_chunk!(self).emit(OpCode::Output { output_index });
         }
 

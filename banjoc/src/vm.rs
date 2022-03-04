@@ -1,30 +1,26 @@
 use std::{
-    collections::HashMap,
     fmt::Display,
     ptr::null,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use crate::{
-    ast::{Ast, NodeId, Source},
+    ast::{Ast, Source},
     compiler::Compiler,
     error::{BanjoError, Result},
     gc::{GarbageCollect, Gc, GcRef},
     obj::{BanjoString, Function, NativeFn, NativeFunction},
     op_code::{Constant, LocalIndex, OpCode},
+    output::{NodeOutputs, Output},
     stack::Stack,
     table::Table,
     value::Value,
 };
 
-pub type NodeOutputs = HashMap<NodeId, Value>;
-
 pub type ValueStack = Stack<Value, { Vm::STACK_MAX }>;
 pub struct Vm {
     pub gc: Gc,
-    /// Output values of nodes in order of execution. Indices correspond with
-    /// `Compiler::output_nodes`.
-    output_values: Vec<Value>,
+    output: Output,
     stack: ValueStack,
     frames: Stack<CallFrame, { Vm::FRAMES_MAX }>,
     globals: Table,
@@ -43,7 +39,7 @@ impl Vm {
             stack: Stack::new(),
             frames: Stack::new(),
             globals: Table::new(),
-            output_values: vec![],
+            output: Output::default(),
         };
 
         vm.define_native("clock", |_, _| {
@@ -81,15 +77,8 @@ impl Vm {
     /// This function can return both compile and runtime errors.
     pub fn interpret(&mut self, source: Source) -> Result<NodeOutputs> {
         let ast = Ast::new(&source);
-        let mut compiler: Compiler<'_> = Compiler::new(&ast, &mut self.gc);
+        let mut compiler: Compiler<'_> = Compiler::new(&ast, &mut self.gc, &mut self.output);
         let function = compiler.compile()?;
-
-        // TODO surely I can avoid this somehow, but it hurts my head :(
-        let output_nodes: Vec<String> = compiler
-            .output_nodes
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
 
         // Leave the <script> function on the stack forever so it's not GC'd
         self.stack.push(Value::Function(function));
@@ -98,12 +87,7 @@ impl Vm {
 
         self.run()?;
 
-        let output_values = std::mem::take(&mut self.output_values);
-        debug_assert_eq!(output_nodes.len(), output_values.len());
-        let outputs: NodeOutputs = output_nodes
-            .into_iter()
-            .zip(output_values.into_iter())
-            .collect();
+        let outputs = self.output.take_node_outputs();
         Ok(outputs)
     }
 
@@ -193,11 +177,7 @@ impl Vm {
                     self.call_value(*self.stack.peek(arg_count), arg_count)?;
                 }
                 OpCode::Output { output_index } => {
-                    let min_len = (output_index + 1) as usize;
-                    if self.output_values.len() < min_len {
-                        self.output_values.resize_with(min_len, || Value::Nil);
-                    }
-                    self.output_values[output_index as usize] = *self.stack.peek(0);
+                    self.output.add_value(output_index, *self.stack.peek(0))
                 }
             }
         }

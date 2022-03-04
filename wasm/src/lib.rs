@@ -3,11 +3,7 @@
 
 mod utils;
 
-use banjoc::{
-    ast::Source,
-    error::BanjoError,
-    vm::{NodeOutputs, Vm},
-};
+use banjoc::{ast::Source, error::BanjoError, output::NodeOutputs, vm::Vm};
 use serde::Serialize;
 use utils::set_panic_hook;
 use wasm_bindgen::prelude::*;

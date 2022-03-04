@@ -8,7 +8,8 @@ use std::{
 use banjoc::{
     ast::Source,
     error::{BanjoError, Result},
-    vm::{NodeOutputs, Vm},
+    output::NodeOutputs,
+    vm::Vm,
 };
 use serde_json::from_str;
 
