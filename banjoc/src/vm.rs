@@ -7,7 +7,7 @@ use std::{
 use crate::{
     ast::{Ast, Source},
     compiler::Compiler,
-    error::{BanjoError, Result},
+    error::{Error, Result},
     gc::{GarbageCollect, Gc, GcRef},
     obj::{BanjoString, Function, NativeFn, NativeFunction},
     op_code::{Constant, LocalIndex, OpCode},
@@ -46,7 +46,7 @@ impl Vm {
             Ok(Value::Number(
                 SystemTime::now()
                     .duration_since(UNIX_EPOCH)
-                    .map_err(|e| BanjoError::runtime(e.to_string()))?
+                    .map_err(|e| Error::runtime(e.to_string()))?
                     .as_secs_f64(),
             ))
         });
@@ -54,7 +54,7 @@ impl Vm {
             args.iter()
                 .copied()
                 .reduce(|accum, item| accum.add(item, vm).unwrap_or(accum))
-                .ok_or_else(|| BanjoError::runtime("Sum: expected at least 1 argument."))
+                .ok_or_else(|| Error::runtime("Sum: expected at least 1 argument."))
         });
         vm.define_native("product", |args, _| {
             args.iter()
@@ -64,7 +64,7 @@ impl Vm {
                         .binary_op(item, |a, b| Value::Number(a * b))
                         .unwrap_or(accum)
                 })
-                .ok_or_else(|| BanjoError::runtime("Product: expected at least 1 argument."))
+                .ok_or_else(|| Error::runtime("Product: expected at least 1 argument."))
         });
 
         vm
@@ -251,12 +251,12 @@ impl Vm {
     }
 
     fn runtime_error<M: Into<String>>(&self, message: M) -> Result<()> {
-        BanjoError::runtime_err(self.make_stacktrace(message))
+        Error::runtime_err(self.make_stacktrace(message))
     }
 
-    fn add_stacktrace(&self, error: BanjoError) -> BanjoError {
+    fn add_stacktrace(&self, error: Error) -> Error {
         match error {
-            BanjoError::Runtime(message) => BanjoError::Runtime(self.make_stacktrace(message)),
+            Error::Runtime(message) => Error::Runtime(self.make_stacktrace(message)),
             _ => error,
         }
     }

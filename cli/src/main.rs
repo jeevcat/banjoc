@@ -5,7 +5,7 @@ use std::{
     time::Instant,
 };
 
-use banjoc::{ast::Source, error::BanjoError, output::Output, vm::Vm};
+use banjoc::{ast::Source, error::Error, output::Output, vm::Vm};
 use serde_json::from_str;
 
 fn repl(vm: &mut Vm) {
@@ -41,9 +41,7 @@ fn interpret(vm: &mut Vm, source: &str) -> Output {
     let source: Source = match from_str(source) {
         Ok(source) => source,
         Err(e) => {
-            return Output::from_single_error(BanjoError::Compile(format!(
-                "JSON parsing error: {e}"
-            )))
+            return Output::from_single_error(Error::Compile(format!("JSON parsing error: {e}")))
         }
     };
     println!("Parsing took {:.0?}", now.elapsed());

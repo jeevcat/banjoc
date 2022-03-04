@@ -1,6 +1,6 @@
 use crate::{
     ast::{BinaryType, LiteralType, UnaryType},
-    error::{BanjoError, Result},
+    error::{Error, Result},
     gc::Gc,
     op_code::{Constant, OpCode},
     value::Value,
@@ -72,7 +72,7 @@ impl Chunk {
         if constant > u8::MAX.into() {
             // TODO we'd want to add another instruction like OpCode::Constant16 which
             // stores the index as a two-byte operand when this limit is hit
-            return BanjoError::compile_err("Too many constants in one chunk.");
+            return Error::compile_err("Too many constants in one chunk.");
         }
         Ok(Constant {
             slot: constant.try_into().unwrap(),

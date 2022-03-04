@@ -1,5 +1,5 @@
 use crate::{
-    error::{BanjoError, Result},
+    error::{Error, Result},
     gc::GcRef,
     obj::{BanjoString, Function},
     op_code::LocalIndex,
@@ -42,7 +42,7 @@ impl<'ast> FuncCompiler<'ast> {
 
     pub fn add_local(&mut self, node_id: &'ast str) -> Result<()> {
         if self.locals.len() == Self::MAX_LOCAL_COUNT {
-            return BanjoError::node_err(node_id, "Too many local variables in function.");
+            return Error::node_err(node_id, "Too many local variables in function.");
         }
 
         // Only "declare" for now, by assigning sentinel value
@@ -72,10 +72,7 @@ impl<'ast> FuncCompiler<'ast> {
                 return if local.is_initialized() {
                     Ok(Some(i as u8))
                 } else {
-                    BanjoError::node_err(
-                        node_id,
-                        "Can't read local variable in its own initializer.",
-                    )
+                    Error::node_err(node_id, "Can't read local variable in its own initializer.")
                 };
             }
         }

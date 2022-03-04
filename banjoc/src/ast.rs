@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Deserializer};
 
-use crate::error::BanjoError;
+use crate::error::Error;
 
 pub type NodeId = String;
 type Nodes = HashMap<String, Node>;
@@ -149,10 +149,10 @@ impl<'source> Ast<'source> {
         }
     }
 
-    pub fn get_node(&self, node_id: &str) -> Result<&Node, BanjoError> {
+    pub fn get_node(&self, node_id: &str) -> Result<&Node, Error> {
         self.nodes
             .get(node_id)
-            .ok_or_else(|| BanjoError::node(node_id, format!("Unknown node id {node_id}.")))
+            .ok_or_else(|| Error::node(node_id, format!("Unknown node id {node_id}.")))
     }
 
     pub fn get_arity(&self, fn_node_id: &str) -> Option<&usize> {

@@ -4,7 +4,7 @@ use serde::Serialize;
 
 use crate::{
     ast::NodeId,
-    error::{BanjoError, Result},
+    error::{Error, Result},
     value::Value,
 };
 
@@ -17,11 +17,11 @@ struct OutputErrors {
 }
 
 impl OutputErrors {
-    fn add(&mut self, error: BanjoError) {
+    fn add(&mut self, error: Error) {
         match error {
-            BanjoError::Compile(s) => self.additional_errors.push(s),
-            BanjoError::Runtime(s) => self.additional_errors.push(s),
-            BanjoError::Node((n, s)) => {
+            Error::Compile(s) => self.additional_errors.push(s),
+            Error::Runtime(s) => self.additional_errors.push(s),
+            Error::Node((n, s)) => {
                 self.node_errors.insert(n, s);
             }
         }
@@ -34,7 +34,7 @@ pub struct Output {
 }
 
 impl Output {
-    pub fn from_single_error(error: BanjoError) -> Self {
+    pub fn from_single_error(error: Error) -> Self {
         let mut errors = OutputErrors::default();
         errors.add(error);
         Self {
@@ -57,10 +57,7 @@ pub struct OutputValues {
 impl OutputValues {
     pub fn add_node(&mut self, node_id: &str) -> Result<u8> {
         if self.output_nodes.len() >= 255 {
-            return BanjoError::node_err(
-                node_id,
-                "Can't preview the output of more than 255 nodes",
-            );
+            return Error::node_err(node_id, "Can't preview the output of more than 255 nodes");
         }
         self.output_nodes.push(node_id.to_string());
         let output_index = (self.output_nodes.len() - 1) as u8;
@@ -75,7 +72,7 @@ impl OutputValues {
         self.output_values[output_index as usize] = value;
     }
 
-    pub fn add_error(&mut self, error: BanjoError) {
+    pub fn add_error(&mut self, error: Error) {
         self.errors.add(error)
     }
 

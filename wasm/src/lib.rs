@@ -3,7 +3,7 @@
 
 mod utils;
 
-use banjoc::{ast::Source, error::BanjoError, output::Output, vm::Vm};
+use banjoc::{ast::Source, error::Error, output::Output, vm::Vm};
 use serde::Serialize;
 use utils::set_panic_hook;
 use wasm_bindgen::prelude::*;
@@ -29,9 +29,7 @@ fn parse_interpret(source: JsValue) -> Output {
     let source: Source = match serde_wasm_bindgen::from_value(source) {
         Ok(source) => source,
         Err(e) => {
-            return Output::from_single_error(BanjoError::Compile(format!(
-                "JSON parsing error: {e}"
-            )))
+            return Output::from_single_error(Error::Compile(format!("JSON parsing error: {e}")))
         }
     };
     vm.interpret(source)

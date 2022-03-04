@@ -2,16 +2,16 @@ use std::collections::HashMap;
 
 use crate::ast::NodeId;
 
-pub type Result<T> = std::result::Result<T, BanjoError>;
+pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug)]
-pub enum BanjoError {
+pub enum Error {
     Compile(String),
     /// A compile error with a known node
     Node((NodeId, String)),
     Runtime(String),
 }
 
-impl BanjoError {
+impl Error {
     pub fn compile<M: Into<String>>(msg: M) -> Self {
         Self::Compile(msg.into())
     }
@@ -31,7 +31,7 @@ impl BanjoError {
         Err(Self::runtime(msg))
     }
 
-    fn node_context(self, node_id: &str) -> BanjoError {
+    fn node_context(self, node_id: &str) -> Error {
         match self {
             Self::Compile(s) => Self::node(node_id, s),
             _ => unreachable!(),
@@ -63,4 +63,4 @@ impl<T> Context<T> for Result<T> {
     }
 }
 
-pub type NodeErrors = HashMap<NodeId, BanjoError>;
+pub type NodeErrors = HashMap<NodeId, Error>;

@@ -6,7 +6,7 @@ use std::{
 use serde::{Serialize, Serializer};
 
 use crate::{
-    error::{BanjoError, Result},
+    error::{Error, Result},
     gc::{GarbageCollect, Gc, GcRef},
     obj::{BanjoString, Function, NativeFunction},
     vm::Vm,
@@ -41,14 +41,14 @@ impl Value {
                 a.as_str(),
                 b.as_str()
             )))),
-            _ => BanjoError::runtime_err("Operands must be two numbers or two strings."),
+            _ => Error::runtime_err("Operands must be two numbers or two strings."),
         }
     }
 
     pub fn binary_op(self, rhs: Self, f: impl Fn(f64, f64) -> Value) -> Result<Self> {
         match (self, rhs) {
             (Value::Number(a), Value::Number(b)) => Ok(f(a, b)),
-            _ => BanjoError::runtime_err("Operands must be numbers."),
+            _ => Error::runtime_err("Operands must be numbers."),
         }
     }
 }
