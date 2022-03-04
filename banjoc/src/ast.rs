@@ -8,7 +8,7 @@ pub type NodeId = String;
 type Nodes = HashMap<String, Node>;
 
 #[derive(Deserialize, Debug)]
-pub struct Ast {
+pub struct Source {
     #[serde(deserialize_with = "deserialize_nodes")]
     pub nodes: Nodes,
 }
@@ -125,17 +125,53 @@ where
     Ok(map)
 }
 
-impl Ast {
+impl Source {}
+
+pub struct Ast<'source> {
+    nodes: &'source Nodes,
+    arities: HashMap<&'source str, usize>,
+    roots: HashMap<&'source str, &'source Node>,
+}
+
+impl<'source> Ast<'source> {
+    pub fn new(source: &'source Source) -> Self {
+        let arities = Self::calculate_arities(&source.nodes);
+        let roots = Self::find_roots(&source.nodes);
+        Self {
+            nodes: &source.nodes,
+            arities,
+            roots,
+        }
+    }
+
     pub fn get_node(&self, node_id: &str) -> Result<&Node, BanjoError> {
         self.nodes
             .get(node_id)
             .ok_or_else(|| BanjoError::compile(node_id, format!("Unknown node id {node_id}.")))
     }
 
-    pub fn find_roots(&self) -> HashMap<&str, &Node> {
+    pub fn get_arity(&self, fn_node_id: &str) -> Option<&usize> {
+        #[cfg(debug_assertions)]
+        {
+            if let Ok(node) = self.get_node(fn_node_id) {
+                assert!(matches!(
+                    node.node_type,
+                    NodeType::FunctionDefinition { .. }
+                ));
+            }
+        }
+
+        self.arities.get(fn_node_id)
+    }
+
+    pub fn get_roots(&self) -> impl Iterator<Item = &Node> {
+        self.roots.values().map(|n| &**n)
+    }
+
+    fn find_roots(nodes: &Nodes) -> HashMap<&str, &Node> {
         let mut roots: HashMap<&str, &Node> =
-            self.nodes.iter().map(|(id, n)| (id.as_str(), n)).collect();
-        for node in self.nodes.values() {
+            nodes.iter().map(|(id, n)| (id.as_str(), n)).collect();
+        for node in nodes.values() {
             for arg in node.arguments() {
                 roots.remove(arg);
             }
@@ -143,7 +179,7 @@ impl Ast {
         roots
     }
 
-    pub fn calculate_arities(&self) -> HashMap<&str, usize> {
+    fn calculate_arities(nodes: &Nodes) -> HashMap<&str, usize> {
         fn traverse(nodes: &Nodes, node_id: &str, current_arity: &mut usize) {
             if let Some(node) = nodes.get(node_id) {
                 if let NodeType::Param = node.node_type {
@@ -155,12 +191,12 @@ impl Ast {
             }
         }
 
-        self.nodes
+        nodes
             .values()
             .filter_map(|node| {
                 if let NodeType::FunctionDefinition { .. } = node.node_type {
                     let mut arity = 0_usize;
-                    traverse(&self.nodes, &node.id, &mut arity);
+                    traverse(nodes, &node.id, &mut arity);
                     return Some((node.id.as_str(), arity));
                 }
                 None

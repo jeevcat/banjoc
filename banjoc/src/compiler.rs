@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    mem,
-};
+use std::{collections::HashSet, mem};
 
 use crate::{
     ast::{Ast, Node, NodeType},
@@ -16,10 +13,9 @@ use crate::{
 pub struct Compiler<'ast> {
     /// Needed so we can allocated functions and interned strings
     gc: &'ast mut Gc,
-    ast: &'ast Ast,
+    ast: &'ast Ast<'ast>,
     // TODO: this should be an option
     compiler: Box<FuncCompiler<'ast>>,
-    arities: HashMap<&'ast str, usize>,
     /// IDs of nodes in order of compilation
     pub output_nodes: Vec<&'ast str>,
 }
@@ -31,12 +27,11 @@ macro_rules! current_chunk {
 }
 
 impl<'ast> Compiler<'ast> {
-    pub fn new(ast: &'ast Ast, gc: &'ast mut Gc) -> Compiler<'ast> {
+    pub fn new(ast: &'ast Ast<'ast>, gc: &'ast mut Gc) -> Compiler<'ast> {
         Self {
             compiler: Box::new(FuncCompiler::new(None, 0)),
             gc,
             ast,
-            arities: ast.calculate_arities(),
             output_nodes: vec![],
         }
     }
@@ -82,7 +77,7 @@ impl<'ast> Compiler<'ast> {
                         );
                     }
 
-                    let arity = *this.get_arity(&node.id).unwrap_or(&256);
+                    let arity = *this.ast.get_arity(&node.id).unwrap_or(&256);
                     if arity > 0 {
                         this.node_function_definition(&node.id, arguments, arity)
                     } else {
@@ -115,8 +110,7 @@ impl<'ast> Compiler<'ast> {
         let mut visited = HashSet::<&str>::new();
 
         // Compile var/fn definitions
-        let roots = self.ast.find_roots();
-        for node in roots.values() {
+        for node in self.ast.get_roots() {
             match node.node_type {
                 NodeType::VariableDefinition { .. } | NodeType::FunctionDefinition { .. } => {
                     visit(self, &mut in_branch, &mut visited, node)
@@ -126,7 +120,7 @@ impl<'ast> Compiler<'ast> {
             }
         }
         // Also compile disconnected roots AFTER definitions
-        for node in roots.values() {
+        for node in self.ast.get_roots() {
             match node.node_type {
                 NodeType::VariableDefinition { .. } | NodeType::FunctionDefinition { .. } => {}
                 _ => self.node(node).unwrap_or_else(|e| errors.append(e)),
@@ -163,7 +157,7 @@ impl<'ast> Compiler<'ast> {
                 self.named_variable(fn_node_id)?;
                 // Functions are compiled as variables if they have no parameters, so skip
                 // calling them if arity == 0
-                let arity = self.get_arity(fn_node_id);
+                let arity = self.ast.get_arity(fn_node_id);
                 if let Some(arity) = arity {
                     if *arity != arguments.len() {
                         return BanjoError::compile_err(
@@ -386,19 +380,5 @@ impl<'ast> Compiler<'ast> {
         }
 
         Ok(())
-    }
-
-    fn get_arity(&self, fn_node_id: &'ast str) -> Option<&usize> {
-        #[cfg(debug_assertions)]
-        {
-            if let Ok(node) = self.ast.get_node(fn_node_id) {
-                assert!(matches!(
-                    node.node_type,
-                    NodeType::FunctionDefinition { .. }
-                ));
-            }
-        }
-
-        self.arities.get(fn_node_id)
     }
 }

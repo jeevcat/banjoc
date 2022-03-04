@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    ast::{Ast, NodeId},
+    ast::{Ast, NodeId, Source},
     compiler::Compiler,
     error::{BanjoError, Result},
     gc::{GarbageCollect, Gc, GcRef},
@@ -79,7 +79,8 @@ impl Vm {
     /// # Errors
     ///
     /// This function can return both compile and runtime errors.
-    pub fn interpret(&mut self, ast: Ast) -> Result<NodeOutputs> {
+    pub fn interpret(&mut self, source: Source) -> Result<NodeOutputs> {
+        let ast = Ast::new(&source);
         let mut compiler: Compiler<'_> = Compiler::new(&ast, &mut self.gc);
         let function = compiler.compile()?;
 

@@ -4,7 +4,7 @@
 mod utils;
 
 use banjoc::{
-    ast::Ast,
+    ast::Source,
     error::BanjoError,
     vm::{NodeOutputs, Vm},
 };
@@ -46,7 +46,7 @@ pub fn interpret(source: JsValue) -> Result<JsValue, JsValue> {
 
 fn parse_interpret(source: JsValue) -> Result<NodeOutputs, BanjoError> {
     let mut vm = Vm::new();
-    let source: Ast = serde_wasm_bindgen::from_value(source)
+    let source: Source = serde_wasm_bindgen::from_value(source)
         .map_err(|e| BanjoError::Compile(format!("JSON parsing error: {e}")))?;
     vm.interpret(source)
 }

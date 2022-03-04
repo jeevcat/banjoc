@@ -6,7 +6,7 @@ use std::{
 };
 
 use banjoc::{
-    ast::Ast,
+    ast::Source,
     error::{BanjoError, Result},
     vm::{NodeOutputs, Vm},
 };
@@ -61,7 +61,7 @@ fn run_file(vm: &mut Vm, path: &str) {
 
 fn interpret(vm: &mut Vm, source: &str) -> Result<NodeOutputs> {
     let now = Instant::now();
-    let source: Ast =
+    let source: Source =
         from_str(source).map_err(|e| BanjoError::Compile(format!("JSON parsing error: {e}")))?;
     println!("Parsing took {:.0?}", now.elapsed());
     vm.interpret(source)
@@ -113,6 +113,6 @@ mod tests {
             ]
           }
         "#;
-        println!("{:#?}", serde_json::from_str::<Ast>(j).unwrap());
+        println!("{:#?}", serde_json::from_str::<Source>(j).unwrap());
     }
 }
