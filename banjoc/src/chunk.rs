@@ -72,9 +72,7 @@ impl Chunk {
         if constant > u8::MAX.into() {
             // TODO we'd want to add another instruction like OpCode::Constant16 which
             // stores the index as a two-byte operand when this limit is hit
-            return Err(BanjoError::Compile(
-                "Too many constants in one chunk.".to_string(),
-            ));
+            return BanjoError::compile_err("Too many constants in one chunk.");
         }
         Ok(Constant {
             slot: constant.try_into().unwrap(),

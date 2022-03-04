@@ -11,7 +11,7 @@ use crate::{
     gc::{GarbageCollect, Gc, GcRef},
     obj::{BanjoString, Function, NativeFn, NativeFunction},
     op_code::{Constant, LocalIndex, OpCode},
-    output::{NodeOutputs, Output},
+    output::{Output, OutputValues},
     stack::Stack,
     table::Table,
     value::Value,
@@ -20,7 +20,7 @@ use crate::{
 pub type ValueStack = Stack<Value, { Vm::STACK_MAX }>;
 pub struct Vm {
     gc: Gc,
-    output: Output,
+    output: OutputValues,
     stack: ValueStack,
     frames: Stack<CallFrame, { Vm::FRAMES_MAX }>,
     globals: Table,
@@ -39,7 +39,7 @@ impl Vm {
             stack: Stack::new(),
             frames: Stack::new(),
             globals: Table::new(),
-            output: Output::default(),
+            output: OutputValues::default(),
         };
 
         vm.define_native("clock", |_, _| {
@@ -75,20 +75,20 @@ impl Vm {
     /// # Errors
     ///
     /// This function can return both compile and runtime errors.
-    pub fn interpret(&mut self, source: Source) -> Result<NodeOutputs> {
+    pub fn interpret(&mut self, source: Source) -> Output {
         let ast = Ast::new(&source);
         let mut compiler: Compiler<'_> = Compiler::new(&ast, &mut self.gc, &mut self.output);
-        let function = compiler.compile()?;
+        let function = compiler.compile();
 
         // Leave the <script> function on the stack forever so it's not GC'd
         self.stack.push(Value::Function(function));
 
-        self.call(function, 0)?;
+        self.call(function, 0)
+            .unwrap_or_else(|e| self.output.add_error(e));
 
-        self.run()?;
+        self.run().unwrap_or_else(|e| self.output.add_error(e));
 
-        let outputs = self.output.take_node_outputs();
-        Ok(outputs)
+        self.output.take()
     }
 
     // Returning an error from this function (including ?) halts execution
@@ -130,7 +130,6 @@ impl Vm {
                     let result = self.stack.pop();
                     let fun_stack_start = self.frames.pop().slot;
                     if self.frames.len() == 0 {
-                        debug_assert!(matches!(result, Value::Function(_)));
                         // Exit interpreter
                         return Ok(());
                     }

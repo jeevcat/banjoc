@@ -22,10 +22,12 @@ pub enum NodeType {
     #[serde(alias = "call", rename_all = "camelCase")]
     FunctionCall {
         fn_node_id: NodeId,
+        #[serde(default)]
         arguments: Vec<NodeId>,
     },
     #[serde(alias = "fn")]
     FunctionDefinition {
+        #[serde(default)]
         arguments: Vec<NodeId>,
     },
     #[serde(alias = "ref", rename_all = "camelCase")]
@@ -34,15 +36,18 @@ pub enum NodeType {
     },
     #[serde(alias = "var")]
     VariableDefinition {
+        #[serde(default)]
         arguments: Vec<NodeId>,
     },
     Param,
     Unary {
         unary_type: UnaryType,
+        #[serde(default)]
         arguments: Vec<NodeId>,
     },
     Binary {
         binary_type: BinaryType,
+        #[serde(default)]
         arguments: Vec<NodeId>,
     },
 }
@@ -147,7 +152,7 @@ impl<'source> Ast<'source> {
     pub fn get_node(&self, node_id: &str) -> Result<&Node, BanjoError> {
         self.nodes
             .get(node_id)
-            .ok_or_else(|| BanjoError::compile(node_id, format!("Unknown node id {node_id}.")))
+            .ok_or_else(|| BanjoError::node(node_id, format!("Unknown node id {node_id}.")))
     }
 
     pub fn get_arity(&self, fn_node_id: &str) -> Option<&usize> {

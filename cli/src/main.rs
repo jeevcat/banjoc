@@ -5,12 +5,7 @@ use std::{
     time::Instant,
 };
 
-use banjoc::{
-    ast::Source,
-    error::{BanjoError, Result},
-    output::NodeOutputs,
-    vm::Vm,
-};
+use banjoc::{ast::Source, error::BanjoError, output::Output, vm::Vm};
 use serde_json::from_str;
 
 fn repl(vm: &mut Vm) {
@@ -24,9 +19,8 @@ fn repl(vm: &mut Vm) {
         if line.is_empty() {
             break;
         }
-        if let Ok(result) = interpret(vm, &line) {
-            println!("{:#?}", result);
-        }
+        let result = interpret(vm, &line);
+        println!("{:#?}", result);
     }
 }
 
@@ -38,32 +32,20 @@ fn run_file(vm: &mut Vm, path: &str) {
             process::exit(74);
         }
     };
-    match interpret(vm, &source) {
-        Ok(result) => println!("{:#?}", result),
-        Err(error) => match error {
-            BanjoError::CompileNode((node_id, e)) => {
-                eprint!("{node_id}: {e}");
-                process::exit(65);
-            }
-            BanjoError::CompileErrors(errors) => {
-                for (node_id, e) in errors {
-                    eprint!("{node_id}: {e}");
-                }
-                process::exit(65);
-            }
-            BanjoError::Runtime(e) => {
-                eprintln!("{e}");
-                process::exit(70);
-            }
-            BanjoError::Compile(e) => panic!("Compile error without node information {e}"),
-        },
-    }
+    let result = interpret(vm, &source);
+    println!("{:#?}", result);
 }
 
-fn interpret(vm: &mut Vm, source: &str) -> Result<NodeOutputs> {
+fn interpret(vm: &mut Vm, source: &str) -> Output {
     let now = Instant::now();
-    let source: Source =
-        from_str(source).map_err(|e| BanjoError::Compile(format!("JSON parsing error: {e}")))?;
+    let source: Source = match from_str(source) {
+        Ok(source) => source,
+        Err(e) => {
+            return Output::from_single_error(BanjoError::Compile(format!(
+                "JSON parsing error: {e}"
+            )))
+        }
+    };
     println!("Parsing took {:.0?}", now.elapsed());
     vm.interpret(source)
 }

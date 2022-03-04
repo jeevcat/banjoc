@@ -7,7 +7,7 @@ use crate::{
     gc::{Gc, GcRef},
     obj::Function,
     op_code::{Constant, OpCode},
-    output::Output,
+    output::OutputValues,
     value::Value,
 };
 
@@ -17,7 +17,7 @@ pub struct Compiler<'ast> {
     /// Needed so we can allocate functions and interned strings
     gc: &'ast mut Gc,
     /// Needed so we can inform VM of nodes that expect output values
-    output: &'ast mut Output,
+    output: &'ast mut OutputValues,
     // TODO: this should be an option
     compiler: Box<FuncCompiler<'ast>>,
 }
@@ -29,7 +29,11 @@ macro_rules! current_chunk {
 }
 
 impl<'ast> Compiler<'ast> {
-    pub fn new(ast: &'ast Ast<'ast>, gc: &'ast mut Gc, output: &'ast mut Output) -> Compiler<'ast> {
+    pub fn new(
+        ast: &'ast Ast<'ast>,
+        gc: &'ast mut Gc,
+        output: &'ast mut OutputValues,
+    ) -> Compiler<'ast> {
         Self {
             compiler: Box::new(FuncCompiler::new(None, 0)),
             gc,
@@ -38,7 +42,7 @@ impl<'ast> Compiler<'ast> {
         }
     }
 
-    pub fn compile(&mut self) -> Result<GcRef<Function>> {
+    pub fn compile(&mut self) -> GcRef<Function> {
         // Topological sort
         fn visit<'ast>(
             this: &mut Compiler<'ast>,
@@ -50,12 +54,10 @@ impl<'ast> Compiler<'ast> {
                 return Ok(());
             }
             if in_branch.contains(node.id.as_str()) {
-                return BanjoError::compile_err(&node.id, "Detected cycle");
+                return BanjoError::node_err(&node.id, "Detected cycle");
             }
 
             in_branch.insert(node.id.as_str());
-
-            let mut errors = BanjoError::CompileErrors(vec![]);
 
             for child in node.dependencies().chain(node.arguments()) {
                 // We shoud ignore missing nodes as they could reference native functions
@@ -63,7 +65,7 @@ impl<'ast> Compiler<'ast> {
                 // referenced
                 if let Ok(child_node) = this.ast.get_node(child) {
                     visit(this, in_branch, visited, child_node)
-                        .unwrap_or_else(|e| errors.append(e));
+                        .unwrap_or_else(|e| this.output.add_error(e));
                 }
             }
 
@@ -73,7 +75,7 @@ impl<'ast> Compiler<'ast> {
             match &node.node_type {
                 NodeType::FunctionDefinition { arguments, .. } => {
                     if arguments.len() != 1 {
-                        return BanjoError::compile_err(
+                        return BanjoError::node_err(
                             &node.id,
                             "Function definition requires exactly 1 input.",
                         );
@@ -90,7 +92,7 @@ impl<'ast> Compiler<'ast> {
                 }
                 NodeType::VariableDefinition { arguments } => {
                     if arguments.len() != 1 {
-                        return BanjoError::compile_err(
+                        return BanjoError::node_err(
                             &node.id,
                             "Variable definition requires exactly 1 input.",
                         );
@@ -100,11 +102,10 @@ impl<'ast> Compiler<'ast> {
                 }
                 _ => Ok(()),
             }
-            .unwrap_or_else(|e| errors.append(e));
-            errors.to_result(())
+            .unwrap_or_else(|e| this.output.add_error(e));
+            Ok(())
         }
 
-        let mut errors = BanjoError::CompileErrors(vec![]);
         // Node is in the current topological sort branch.
         // If true and this node is visited during compilation, then graph is cyclic
         let mut in_branch = HashSet::<&str>::new();
@@ -116,7 +117,7 @@ impl<'ast> Compiler<'ast> {
             match node.node_type {
                 NodeType::VariableDefinition { .. } | NodeType::FunctionDefinition { .. } => {
                     visit(self, &mut in_branch, &mut visited, node)
-                        .unwrap_or_else(|e| errors.append(e))
+                        .unwrap_or_else(|e| self.output.add_error(e));
                 }
                 _ => {}
             }
@@ -125,14 +126,13 @@ impl<'ast> Compiler<'ast> {
         for node in self.ast.get_roots() {
             match node.node_type {
                 NodeType::VariableDefinition { .. } | NodeType::FunctionDefinition { .. } => {}
-                _ => self.node(node).unwrap_or_else(|e| errors.append(e)),
+                _ => self.node(node).unwrap_or_else(|e| self.output.add_error(e)),
             }
         }
 
         let function = self.pop_func_compiler().function;
 
-        // TODO need to return BOTH errors and function here
-        errors.to_result(self.gc.alloc(function))
+        self.gc.alloc(function)
     }
 
     fn node(&mut self, node: &'ast Node) -> Result<()> {
@@ -162,7 +162,7 @@ impl<'ast> Compiler<'ast> {
                 let arity = self.ast.get_arity(fn_node_id);
                 if let Some(arity) = arity {
                     if *arity != arguments.len() {
-                        return BanjoError::compile_err(
+                        return BanjoError::node_err(
                             &node.id,
                             format!("Expected {} arguments but got {}.", arity, arguments.len()),
                         );
@@ -178,7 +178,7 @@ impl<'ast> Compiler<'ast> {
                 unary_type,
             } => {
                 if arguments.len() != 1 {
-                    return BanjoError::compile_err(&node.id, "Unary has invalid input.");
+                    return BanjoError::node_err(&node.id, "Unary has invalid input.");
                 }
                 let argument = self.ast.get_node(&arguments[0])?;
                 self.node(argument)?;
@@ -189,7 +189,7 @@ impl<'ast> Compiler<'ast> {
                 binary_type,
             } => {
                 if arguments.len() != 2 {
-                    return BanjoError::compile_err(&node.id, "Binary has invalid input.");
+                    return BanjoError::node_err(&node.id, "Binary has invalid input.");
                 }
                 for term in arguments {
                     let term = self.ast.get_node(term)?;
@@ -212,7 +212,7 @@ impl<'ast> Compiler<'ast> {
         arity: usize,
     ) -> Result<()> {
         if arity > 255 {
-            return BanjoError::compile_err(node_id, "Can't have more than 255 parameters.");
+            return BanjoError::node_err(node_id, "Can't have more than 255 parameters.");
         }
         let body_node = self.ast.get_node(&arguments[0])?;
         self.fun_declaration(body_node, node_id, arity)?;
@@ -308,7 +308,7 @@ impl<'ast> Compiler<'ast> {
         debug_assert!(self.compiler.is_local_scope());
 
         if self.compiler.is_local_already_in_scope(node_id) {
-            return BanjoError::compile_err(
+            return BanjoError::node_err(
                 node_id,
                 "Already a variable with this name in this scope.",
             );
