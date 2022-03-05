@@ -1,14 +1,11 @@
-use std::{
-    fmt::Display,
-    ptr::null,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{fmt::Display, ptr::null};
 
 use crate::{
     ast::{Ast, Source},
     compiler::Compiler,
     error::{Error, Result},
     gc::{GarbageCollect, Gc, GcRef},
+    native_functions::{clock, product, sum},
     obj::{BanjoString, Function, NativeFn, NativeFunction},
     op_code::{Constant, LocalIndex, OpCode},
     output::{Output, OutputValues},
@@ -42,32 +39,9 @@ impl Vm {
             output: OutputValues::default(),
         };
 
-        vm.define_native("clock", |_, _| {
-            Ok(Value::Number(
-                SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .map_err(|e| Error::runtime(e.to_string()))?
-                    .as_secs_f64(),
-            ))
-        });
-        vm.define_native("sum", |args, vm| {
-            Ok(args
-                .iter()
-                .copied()
-                .reduce(|accum, item| accum.add(item, vm).unwrap_or(accum))
-                .unwrap_or(Value::Nil))
-        });
-        vm.define_native("product", |args, _| {
-            Ok(args
-                .iter()
-                .copied()
-                .reduce(|accum, item| {
-                    accum
-                        .binary_op(item, |a, b| Value::Number(a * b))
-                        .unwrap_or(accum)
-                })
-                .unwrap_or(Value::Nil))
-        });
+        vm.define_native("clock", clock);
+        vm.define_native("sum", sum);
+        vm.define_native("product", product);
 
         vm
     }

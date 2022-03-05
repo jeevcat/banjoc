@@ -7,6 +7,7 @@ mod compiler;
 mod disassembler;
 mod func_compiler;
 mod gc;
+mod native_functions;
 mod obj;
 mod op_code;
 mod stack;
