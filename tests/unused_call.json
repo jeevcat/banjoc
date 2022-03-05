@@ -1,0 +1,25 @@
+{
+  "nodes": [
+    {
+      "id": "call_custom_fn",
+      "type": "call",
+      "fnNodeId": "custom_fn"
+    },
+    {
+      "id": "lit",
+      "type": "literal",
+      "value": -7
+    },
+    {
+      "arguments": ["lit"],
+      "id": "custom_fn",
+      "type": "fn",
+      "name": "Calculate the things"
+    },
+    {
+      "id": "unused_sum",
+      "type": "call",
+      "fnNodeId": "sum"
+    }
+  ]
+}

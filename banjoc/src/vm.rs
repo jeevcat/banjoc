@@ -51,20 +51,22 @@ impl Vm {
             ))
         });
         vm.define_native("sum", |args, vm| {
-            args.iter()
+            Ok(args
+                .iter()
                 .copied()
                 .reduce(|accum, item| accum.add(item, vm).unwrap_or(accum))
-                .ok_or_else(|| Error::runtime("Sum: expected at least 1 argument."))
+                .unwrap_or(Value::Nil))
         });
         vm.define_native("product", |args, _| {
-            args.iter()
+            Ok(args
+                .iter()
                 .copied()
                 .reduce(|accum, item| {
                     accum
                         .binary_op(item, |a, b| Value::Number(a * b))
                         .unwrap_or(accum)
                 })
-                .ok_or_else(|| Error::runtime("Product: expected at least 1 argument."))
+                .unwrap_or(Value::Nil))
         });
 
         vm
@@ -211,8 +213,11 @@ impl Vm {
     fn call_value(&mut self, callee: Value, arg_count: usize) -> Result<()> {
         match callee {
             Value::NativeFunction(callee) => {
+                dbg!(arg_count);
                 let args = self.stack.pop_n(arg_count);
+                dbg!(args);
                 let result = (callee.function)(args, self).map_err(|e| self.add_stacktrace(e))?;
+                dbg!(result);
                 self.stack.pop();
                 self.stack.push(result);
                 Ok(())
