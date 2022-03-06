@@ -1,7 +1,0 @@
-digraph A {
-    product [type=call, label=product]
-    4 -> product
-    2 -> product
-    3 -> product
-    product -> return
-}

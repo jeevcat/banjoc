@@ -1,15 +1,10 @@
 {
   "nodes": [
     {
-      "arguments": ["sum"],
-      "id": "return",
-      "type": "return"
-    },
-    {
       "arguments": ["a", "b"],
-      "id": "sum",
+      "id": "add",
       "type": "call",
-      "value": "sum"
+      "fnNodeId": "sum"
     },
     {
       "id": "a",

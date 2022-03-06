@@ -28,7 +28,6 @@
       "name": "new_function"
     },
     {
-      "arguments": [],
       "id": "call",
       "type": "call",
       "fnNodeId": "new_function"

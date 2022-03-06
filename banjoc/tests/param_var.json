@@ -7,7 +7,6 @@
       "name": "new_var"
     },
     {
-      "arguments": [],
       "id": "param_node",
       "type": "param",
       "name": "param"

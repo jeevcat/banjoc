@@ -32,11 +32,6 @@
       "type": "literal",
       "id": "lit",
       "value": 1
-    },
-    {
-      "type": "return",
-      "arguments": ["call1"],
-      "id": "return"
     }
   ]
 }

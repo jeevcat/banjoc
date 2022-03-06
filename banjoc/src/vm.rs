@@ -187,11 +187,8 @@ impl Vm {
     fn call_value(&mut self, callee: Value, arg_count: usize) -> Result<()> {
         match callee {
             Value::NativeFunction(callee) => {
-                dbg!(arg_count);
                 let args = self.stack.pop_n(arg_count);
-                dbg!(args);
                 let result = (callee.function)(args, self).map_err(|e| self.add_stacktrace(e))?;
-                dbg!(result);
                 self.stack.pop();
                 self.stack.push(result);
                 Ok(())

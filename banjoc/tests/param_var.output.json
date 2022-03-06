@@ -1,0 +1,5 @@
+{
+  "nodeErrors": {
+    "param_node": "Can only use param in function declaration."
+  }
+}

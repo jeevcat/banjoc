@@ -12,9 +12,9 @@ mod obj;
 mod op_code;
 mod stack;
 mod table;
-mod value;
 
 pub mod ast;
 pub mod error;
 pub mod output;
+pub mod value;
 pub mod vm;
