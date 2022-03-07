@@ -1,4 +1,4 @@
-use std::fmt::{self, Display, Formatter, Write};
+use std::fmt::{self, Debug, Formatter, Write};
 
 use crate::{
     chunk::Chunk,
@@ -13,6 +13,7 @@ pub enum ObjectType {
     String,
     NativeFunction,
     Function,
+    List,
 }
 
 pub struct BanjoString {
@@ -36,9 +37,9 @@ impl BanjoString {
     }
 }
 
-impl Display for BanjoString {
+impl Debug for BanjoString {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        Display::fmt(&self.string, f)
+        Debug::fmt(&self.string, f)
     }
 }
 
@@ -70,11 +71,11 @@ impl Function {
     }
 }
 
-impl Display for Function {
+impl Debug for Function {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         if let Some(name) = self.name {
             f.write_str("<fn ")?;
-            Display::fmt(&name.string, f)?;
+            Debug::fmt(&name.string, f)?;
             f.write_char('>')?;
         } else {
             f.write_str("<script>")?;
@@ -98,9 +99,29 @@ impl NativeFunction {
     }
 }
 
-impl Display for NativeFunction {
+impl Debug for NativeFunction {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.write_str("<native fn>")?;
         Ok(())
+    }
+}
+
+pub struct List {
+    pub header: ObjHeader,
+    pub values: Vec<Value>,
+}
+
+impl List {
+    pub fn new(values: Vec<Value>) -> Self {
+        Self {
+            header: ObjHeader::new(ObjectType::List),
+            values,
+        }
+    }
+}
+
+impl Debug for List {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Debug::fmt(&self.values, f)
     }
 }

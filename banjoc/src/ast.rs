@@ -59,6 +59,7 @@ pub enum LiteralType {
     Nil,
     Number(f64),
     String(String),
+    List(Vec<LiteralType>),
 }
 
 #[derive(Deserialize, Debug)]

@@ -1,0 +1,20 @@
+{
+  "nodes": [
+    {
+      "arguments": ["a", "b"],
+      "id": "add",
+      "type": "call",
+      "fnNodeId": "sum"
+    },
+    {
+      "id": "a",
+      "type": "literal",
+      "value": [1, "hi ", false, 2, "hello", true, true, null, false, ["nice", -4, null]]
+    },
+    {
+      "id": "b",
+      "type": "literal",
+      "value": [4, 5, 6, true, " world", " lies", true, true, [" friend", false, null, 1], " space"]
+    }
+  ]
+}

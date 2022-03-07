@@ -1,0 +1,16 @@
+{
+  "nodeValues": {
+    "add": [
+      5,
+      "hi 5",
+      6,
+      3,
+      "hello world",
+      "true lies",
+      2,
+      true,
+      ["false friend", 0, false, 1],
+      ["nice space", "-4 space", " space"]
+    ]
+  }
+}

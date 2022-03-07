@@ -1,4 +1,4 @@
-use std::{fmt::Display, ptr::null};
+use std::{fmt, ptr::null};
 
 use crate::{
     ast::{Ast, Source},
@@ -84,7 +84,7 @@ impl Vm {
                 OpCode::Add => {
                     let b = *self.stack.peek(0);
                     let a = *self.stack.peek(1);
-                    let result = a.add(b, self).map_err(|e| self.add_stacktrace(e))?;
+                    let result = a.add(b, self);
                     self.stack.push(result);
                 }
                 // Load constant/function onto the stack
@@ -221,7 +221,7 @@ impl Vm {
         for i in (0..self.frames.len()).rev() {
             let frame = self.frames.read(i);
             let closure = frame.function;
-            error_str += &format!("\nin {}", *closure);
+            error_str += &format!("\nin {:?}", *closure);
         }
         error_str
     }
@@ -256,7 +256,7 @@ impl Vm {
     /// collector
     pub fn alloc<T>(&mut self, object: T) -> GcRef<T>
     where
-        T: Display,
+        T: fmt::Debug,
     {
         self.mark_and_collect_garbage();
         self.gc.alloc(object)

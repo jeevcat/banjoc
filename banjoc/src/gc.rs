@@ -1,12 +1,12 @@
 use std::{
-    fmt::Display,
+    fmt::{self, Debug},
     mem,
     ops::{Deref, DerefMut},
     ptr::NonNull,
 };
 
 use crate::{
-    obj::{hash_string, BanjoString, Function, NativeFunction, ObjectType},
+    obj::{hash_string, BanjoString, Function, List, NativeFunction, ObjectType},
     table::Table,
     value::Value,
 };
@@ -18,6 +18,7 @@ impl HeaderPtr {
             ObjectType::String => mem::size_of::<BanjoString>(),
             ObjectType::NativeFunction => mem::size_of::<NativeFunction>(),
             ObjectType::Function => mem::size_of::<Function>(),
+            ObjectType::List => mem::size_of::<List>(),
         }
     }
 
@@ -31,6 +32,7 @@ impl HeaderPtr {
             ObjectType::String => self.transmute::<BanjoString>().drop_ptr(),
             ObjectType::NativeFunction => self.transmute::<NativeFunction>().drop_ptr(),
             ObjectType::Function => self.transmute::<Function>().drop_ptr(),
+            ObjectType::List => self.transmute::<List>().drop_ptr(),
         }
     }
 }
@@ -57,12 +59,13 @@ impl DerefMut for HeaderPtr {
     }
 }
 
-impl Display for HeaderPtr {
+impl Debug for HeaderPtr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.obj_type {
             ObjectType::String => self.transmute::<BanjoString>().fmt(f),
             ObjectType::NativeFunction => self.transmute::<NativeFunction>().fmt(f),
             ObjectType::Function => self.transmute::<Function>().fmt(f),
+            ObjectType::List => self.transmute::<List>().fmt(f),
         }
     }
 }
@@ -73,7 +76,7 @@ pub struct GcRef<T> {
     pub pointer: NonNull<T>,
 }
 
-impl<T: Display> GcRef<T> {
+impl<T: Debug> GcRef<T> {
     pub fn dangling() -> Self {
         Self {
             pointer: NonNull::dangling(),
@@ -135,7 +138,7 @@ pub trait GarbageCollect {
 
 impl<T> GarbageCollect for GcRef<T>
 where
-    T: Display,
+    T: Debug,
 {
     fn mark_gray(&mut self, gc: &mut Gc) {
         if self.is_marked() {
@@ -208,7 +211,7 @@ impl Gc {
     /// collector
     pub fn alloc<T>(&mut self, object: T) -> GcRef<T>
     where
-        T: Display,
+        T: fmt::Debug,
     {
         // TODO https://users.rust-lang.org/t/how-to-create-large-objects-directly-in-heap/26405
 
@@ -297,6 +300,16 @@ impl Gc {
                     constant.mark_gray(self);
                 }
             }
+            ObjectType::List => {
+                let list = obj.transmute::<List>();
+                for value in &list.values {
+                    match value {
+                        Value::List(l) => self.blacken_object(l.header()),
+                        Value::Function(f) => self.blacken_object(f.header()),
+                        _ => {}
+                    }
+                }
+            }
         }
     }
 
@@ -351,6 +364,7 @@ impl Default for Gc {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::obj::List;
 
     #[test]
     fn as_obj_transmute() {
@@ -379,6 +393,16 @@ mod tests {
         let gcref = GcRef { pointer };
         let ls = Function::new(Some(gcref), 0);
         assert!(matches!(ls.header.obj_type, ObjectType::Function));
+    }
+
+    #[test]
+    fn list_header() {
+        let list = List::new(vec![
+            Value::Number(1.0),
+            Value::Number(2.0),
+            Value::Number(3.0),
+        ]);
+        assert!(matches!(list.header.obj_type, ObjectType::List));
     }
 
     #[test]

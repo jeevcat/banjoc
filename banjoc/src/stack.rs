@@ -1,5 +1,5 @@
 use std::{
-    fmt::{Debug, Display, Write},
+    fmt::{Debug, Write},
     mem::MaybeUninit,
 };
 
@@ -98,11 +98,11 @@ where
 
 impl<T, const N: usize> Debug for Stack<T, N>
 where
-    T: Default + Display,
+    T: Default + Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for index in 0..self.index {
-            f.write_str(&format!("[ {} ]", self.read(index)))?;
+            f.write_str(&format!("[ {:?} ]", self.read(index)))?;
         }
         f.write_char('\n')?;
         Ok(())

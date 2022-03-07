@@ -2,6 +2,7 @@ use crate::{
     ast::{BinaryType, LiteralType, UnaryType},
     error::{Error, Result},
     gc::Gc,
+    obj::List,
     op_code::{Constant, OpCode},
     value::Value,
 };
@@ -63,6 +64,11 @@ impl Chunk {
                 let value = Value::String(gc.intern(s));
                 self.emit_constant(value)?;
             }
+            LiteralType::List(l) => {
+                let values = l.iter().map(|v| from(v, gc)).collect();
+                let value = Value::List(gc.alloc(List::new(values)));
+                self.emit_constant(value)?;
+            }
         }
         Ok(())
     }
@@ -94,5 +100,18 @@ impl Chunk {
 impl Default for Chunk {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+fn from(lit: &LiteralType, gc: &mut Gc) -> Value {
+    match lit {
+        LiteralType::Nil => Value::Nil,
+        LiteralType::Bool(a) => Value::Bool(*a),
+        LiteralType::Number(a) => Value::Number(*a),
+        LiteralType::String(a) => Value::String(gc.intern(a)),
+        LiteralType::List(a) => {
+            let l = a.iter().map(|v| from(v, gc)).collect();
+            Value::List(gc.alloc(List::new(l)))
+        }
     }
 }

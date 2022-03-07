@@ -19,7 +19,6 @@ fn run_all_tests() {
             continue;
         }
         let base = name.trim_end_matches(".json");
-        dbg!(name);
         let source = read_from_file(name);
         let mut vm = Vm::new();
         let output = vm.interpret(source);
@@ -56,11 +55,11 @@ pub struct TestOutput {
 #[derive(Deserialize, Debug, PartialEq)]
 #[serde(untagged)]
 pub enum TestValue {
-    Bool(bool),
     Nil,
+    Bool(bool),
     Number(f64),
-    // Following are pointers to garbage collected objects. Value is NOT deep copied.
     String(String),
+    List(Vec<TestValue>),
 }
 
 impl PartialEq<Output> for TestOutput {
@@ -111,6 +110,21 @@ impl PartialEq<Value> for TestValue {
                     a.as_str() == b.as_str()
                 } else {
                     panic!("Expected string")
+                }
+            }
+            TestValue::List(test_list) => {
+                if let Value::List(list) = other {
+                    if test_list.len() != list.values.len() {
+                        return false;
+                    }
+                    for (i, test_item) in test_list.iter().enumerate() {
+                        if test_item != &list.values[i] {
+                            return false;
+                        }
+                    }
+                    true
+                } else {
+                    panic!("Expected list")
                 }
             }
         }

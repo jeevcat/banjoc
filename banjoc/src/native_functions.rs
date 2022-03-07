@@ -19,7 +19,7 @@ pub fn sum(args: &[Value], vm: &mut Vm) -> Result<Value> {
     Ok(args
         .iter()
         .copied()
-        .reduce(|accum, item| accum.add(item, vm).unwrap_or(accum))
+        .reduce(|accum, item| accum.add(item, vm))
         .unwrap_or(Value::Nil))
 }
 

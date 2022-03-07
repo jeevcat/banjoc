@@ -58,7 +58,7 @@ fn simple_instruction(name: &str, offset: usize) -> usize {
 
 fn constant_instruction(name: &str, chunk: &Chunk, offset: usize, constant: Constant) -> usize {
     println!(
-        "{:-16} {:4} '{}'",
+        "{:-16} {:4} '{:?}'",
         name, constant.slot, chunk.constants[constant.slot as usize]
     );
     offset + 1
