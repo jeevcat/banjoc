@@ -1,7 +1,7 @@
 use std::{collections::HashSet, mem};
 
 use crate::{
-    ast::{Ast, Node, NodeType},
+    ast::{Ast, LiteralType, Node, NodeType},
     error::{Context, Error, Result},
     func_compiler::FuncCompiler,
     gc::{Gc, GcRef},
@@ -100,6 +100,7 @@ impl<'ast> Compiler<'ast> {
 
                     this.node_variable_definition(&node.id, arguments)
                 }
+                NodeType::Const { value } => this.node_const_declaration(value, &node.id),
                 _ => Ok(()),
             }
             .unwrap_or_else(|e| this.output.add_error(e));
@@ -115,7 +116,9 @@ impl<'ast> Compiler<'ast> {
         // Compile var/fn definitions
         for node in self.ast.get_roots() {
             match node.node_type {
-                NodeType::VariableDefinition { .. } | NodeType::FunctionDefinition { .. } => {
+                NodeType::VariableDefinition { .. }
+                | NodeType::FunctionDefinition { .. }
+                | NodeType::Const { .. } => {
                     visit(self, &mut in_branch, &mut visited, node)
                         .unwrap_or_else(|e| self.output.add_error(e));
                 }
@@ -125,7 +128,9 @@ impl<'ast> Compiler<'ast> {
         // Also compile disconnected roots AFTER definitions
         for node in self.ast.get_roots() {
             match node.node_type {
-                NodeType::VariableDefinition { .. } | NodeType::FunctionDefinition { .. } => {}
+                NodeType::VariableDefinition { .. }
+                | NodeType::FunctionDefinition { .. }
+                | NodeType::Const { .. } => {}
                 _ => self.node(node).unwrap_or_else(|e| self.output.add_error(e)),
             }
         }
@@ -203,8 +208,9 @@ impl<'ast> Compiler<'ast> {
                 }
                 current_chunk!(self).emit_binary(binary_type);
             }
-            NodeType::FunctionDefinition { .. } | NodeType::VariableDefinition { .. } => {
-                // Should only be called via topological sort in Self::compile()
+            NodeType::FunctionDefinition { .. }
+            | NodeType::VariableDefinition { .. }
+            | NodeType::Const { .. } => {
                 unreachable!("Should only be called via topological sort in Self::compile()");
             }
         }
@@ -284,6 +290,20 @@ impl<'ast> Compiler<'ast> {
         current_chunk!(self).emit(OpCode::Call {
             arg_count: arg_node_ids.len() as u8,
         });
+        Ok(())
+    }
+
+    /// A shortcut node for literal + var declaration
+    fn node_const_declaration(&mut self, value: &LiteralType, node_id: &'ast str) -> Result<()> {
+        let global = self.declare_variable(node_id);
+
+        current_chunk!(self)
+            .literal(self.gc, value)
+            .node_context(node_id)?;
+
+        self.output(node_id)?;
+
+        self.define_variable(global);
         Ok(())
     }
 

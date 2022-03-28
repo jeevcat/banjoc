@@ -1,0 +1,25 @@
+{
+  "nodes": [
+    {
+      "id": "a_const",
+      "type": "const",
+      "value": 7
+    },
+    {
+      "arguments": ["a", "b"],
+      "id": "add",
+      "type": "call",
+      "fnNodeId": "sum"
+    },
+    {
+      "id": "a",
+      "type": "ref",
+      "varNodeId": "a_const"
+    },
+    {
+      "id": "b",
+      "type": "literal",
+      "value": 2
+    }
+  ]
+}

@@ -16,6 +16,9 @@ pub struct Source {
 #[derive(Deserialize, Debug)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum NodeType {
+    Const {
+        value: LiteralType,
+    },
     Literal {
         value: LiteralType,
     },
