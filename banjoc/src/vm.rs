@@ -1,4 +1,4 @@
-use std::{fmt, ptr::null};
+use std::{fmt, fmt::Write, ptr::null};
 
 use crate::{
     ast::{Ast, Source},
@@ -221,7 +221,7 @@ impl Vm {
         for i in (0..self.frames.len()).rev() {
             let frame = self.frames.read(i);
             let closure = frame.function;
-            error_str += &format!("\nin {:?}", *closure);
+            write!(error_str, "\nin {:?}", *closure).unwrap();
         }
         error_str
     }
