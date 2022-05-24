@@ -1,11 +1,6 @@
 {
   "nodes": [
     {
-      "id": "a_const",
-      "type": "const",
-      "value": 7
-    },
-    {
       "arguments": ["a", "b"],
       "id": "add",
       "type": "call",
@@ -20,6 +15,11 @@
       "id": "b",
       "type": "literal",
       "value": 2
+    },
+    {
+      "id": "a_const",
+      "type": "const",
+      "value": 7
     }
   ]
 }
