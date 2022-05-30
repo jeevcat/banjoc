@@ -1,5 +1,5 @@
 [workspace]
-members = ["banjoc", "cli", "wasm"]
+members = ["banjoc", "cli", "banjo-wasm"]
 
 [profile.release]
 #debug = true
