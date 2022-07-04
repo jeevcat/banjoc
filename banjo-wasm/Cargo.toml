@@ -14,7 +14,7 @@ default = ["console_error_panic_hook"]
 
 [dependencies]
 wasm-bindgen = "0.2.81"
-serde = "1.0.137"
+serde = "1.0.138"
 serde-wasm-bindgen = "0.4.3"
 
 banjoc = { path = "../banjoc" }
