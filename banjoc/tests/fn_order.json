@@ -4,25 +4,25 @@
       "type": "fn",
       "id": "fn1",
       "name": "fn1",
-      "arguments": ["call2"]
+      "args": ["call2"]
     },
     {
       "type": "fn",
       "id": "fn2",
       "name": "fn2",
-      "arguments": ["param"]
+      "args": ["param"]
     },
     {
       "type": "call",
       "id": "call2",
       "fnNodeId": "fn2",
-      "arguments": ["lit"]
+      "args": ["lit"]
     },
     {
       "type": "call",
       "id": "call1",
       "fnNodeId": "fn1",
-      "arguments": []
+      "args": []
     },
     {
       "type": "param",

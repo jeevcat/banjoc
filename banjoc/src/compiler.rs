@@ -59,7 +59,7 @@ impl<'ast> Compiler<'ast> {
 
             in_branch.insert(node.id.as_str());
 
-            for child in node.dependencies().chain(node.arguments()) {
+            for child in node.dependencies().chain(node.args()) {
                 // We shoud ignore missing nodes as they could reference native functions
                 // Besides, the error will surface later if a non-native function is incorrectly
                 // referenced
@@ -73,8 +73,8 @@ impl<'ast> Compiler<'ast> {
             visited.insert(node.id.as_str());
 
             match &node.node_type {
-                NodeType::FunctionDefinition { arguments, .. } => {
-                    if arguments.len() != 1 {
+                NodeType::FunctionDefinition { args, .. } => {
+                    if args.len() != 1 {
                         return Error::node_err(
                             &node.id,
                             "Function definition requires exactly 1 input.",
@@ -83,22 +83,22 @@ impl<'ast> Compiler<'ast> {
 
                     let arity = *this.ast.get_arity(&node.id).unwrap_or(&256);
                     if arity > 0 {
-                        this.node_function_definition(&node.id, arguments, arity)
+                        this.node_function_definition(&node.id, args, arity)
                     } else {
                         // Treat a function defn with no parameters as a variable defn, effectively
                         // memoizing it
-                        this.node_variable_definition(&node.id, arguments)
+                        this.node_variable_definition(&node.id, args)
                     }
                 }
-                NodeType::VariableDefinition { arguments } => {
-                    if arguments.len() != 1 {
+                NodeType::VariableDefinition { args } => {
+                    if args.len() != 1 {
                         return Error::node_err(
                             &node.id,
                             "Variable definition requires exactly 1 input.",
                         );
                     }
 
-                    this.node_variable_definition(&node.id, arguments)
+                    this.node_variable_definition(&node.id, args)
                 }
                 NodeType::Const { value } => this.node_const_declaration(value, &node.id),
                 _ => Ok(()),
@@ -163,46 +163,37 @@ impl<'ast> Compiler<'ast> {
                 self.named_variable(var_node_id)?;
                 self.output(&node.id)?;
             }
-            NodeType::FunctionCall {
-                arguments,
-                fn_node_id,
-            } => {
+            NodeType::FunctionCall { args, fn_node_id } => {
                 self.named_variable(fn_node_id)?;
                 // Functions are compiled as variables if they have no parameters, so skip
                 // calling them if arity == 0
                 let arity = self.ast.get_arity(fn_node_id);
                 if let Some(arity) = arity {
-                    if *arity != arguments.len() {
+                    if *arity != args.len() {
                         return Error::node_err(
                             &node.id,
-                            format!("Expected {} arguments but got {}.", arity, arguments.len()),
+                            format!("Expected {} arguments but got {}.", arity, args.len()),
                         );
                     }
                 }
                 if *arity.unwrap_or(&256) > 0 {
-                    self.call(arguments)?;
+                    self.call(args)?;
                 }
                 self.output(&node.id)?;
             }
-            NodeType::Unary {
-                arguments,
-                unary_type,
-            } => {
-                if arguments.len() != 1 {
+            NodeType::Unary { args, unary_type } => {
+                if args.len() != 1 {
                     return Error::node_err(&node.id, "Unary has invalid input.");
                 }
-                let argument = self.ast.get_node(&arguments[0])?;
+                let argument = self.ast.get_node(&args[0])?;
                 self.node(argument)?;
                 current_chunk!(self).emit_unary(unary_type);
             }
-            NodeType::Binary {
-                arguments,
-                binary_type,
-            } => {
-                if arguments.len() != 2 {
+            NodeType::Binary { args, binary_type } => {
+                if args.len() != 2 {
                     return Error::node_err(&node.id, "Binary has invalid input.");
                 }
-                for term in arguments {
+                for term in args {
                     let term = self.ast.get_node(term)?;
                     self.node(term)?;
                 }
@@ -220,19 +211,19 @@ impl<'ast> Compiler<'ast> {
     fn node_function_definition(
         &mut self,
         node_id: &'ast str,
-        arguments: &[String],
+        args: &[String],
         arity: usize,
     ) -> Result<()> {
         if arity > 255 {
             return Error::node_err(node_id, "Can't have more than 255 parameters.");
         }
-        let body_node = self.ast.get_node(&arguments[0])?;
+        let body_node = self.ast.get_node(&args[0])?;
         self.fun_declaration(body_node, node_id, arity)?;
         Ok(())
     }
 
-    fn node_variable_definition(&mut self, node_id: &'ast str, arguments: &[String]) -> Result<()> {
-        let body_node = self.ast.get_node(&arguments[0])?;
+    fn node_variable_definition(&mut self, node_id: &'ast str, args: &[String]) -> Result<()> {
+        let body_node = self.ast.get_node(&args[0])?;
         self.var_declaration(body_node, node_id)?;
         Ok(())
     }

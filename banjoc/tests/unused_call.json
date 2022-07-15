@@ -11,7 +11,7 @@
       "value": -7
     },
     {
-      "arguments": ["lit"],
+      "args": ["lit"],
       "id": "custom_fn",
       "type": "fn",
       "name": "Calculate the things"

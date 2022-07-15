@@ -1,7 +1,7 @@
 {
   "nodes": [
     {
-      "arguments": ["lit"],
+      "args": ["lit"],
       "id": "new_var",
       "type": "var",
       "name": "new_var"

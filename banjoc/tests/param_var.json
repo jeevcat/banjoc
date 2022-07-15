@@ -1,7 +1,7 @@
 {
   "nodes": [
     {
-      "arguments": ["call_sum"],
+      "args": ["call_sum"],
       "id": "new_var",
       "type": "var",
       "name": "new_var"
@@ -12,7 +12,7 @@
       "name": "param"
     },
     {
-      "arguments": ["param_node"],
+      "args": ["param_node"],
       "id": "call_sum",
       "type": "call",
       "fnNodeId": "sum"

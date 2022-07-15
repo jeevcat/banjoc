@@ -26,12 +26,12 @@ pub enum NodeType {
     FunctionCall {
         fn_node_id: NodeId,
         #[serde(default)]
-        arguments: Vec<NodeId>,
+        args: Vec<NodeId>,
     },
     #[serde(alias = "fn")]
     FunctionDefinition {
         #[serde(default)]
-        arguments: Vec<NodeId>,
+        args: Vec<NodeId>,
     },
     #[serde(alias = "ref", rename_all = "camelCase")]
     VariableReference {
@@ -40,18 +40,18 @@ pub enum NodeType {
     #[serde(alias = "var")]
     VariableDefinition {
         #[serde(default)]
-        arguments: Vec<NodeId>,
+        args: Vec<NodeId>,
     },
     Param,
     Unary {
         unary_type: UnaryType,
         #[serde(default)]
-        arguments: Vec<NodeId>,
+        args: Vec<NodeId>,
     },
     Binary {
         binary_type: BinaryType,
         #[serde(default)]
-        arguments: Vec<NodeId>,
+        args: Vec<NodeId>,
     },
 }
 
@@ -101,13 +101,13 @@ pub struct Node {
 }
 
 impl Node {
-    pub fn arguments(&self) -> impl Iterator<Item = &str> {
+    pub fn args(&self) -> impl Iterator<Item = &str> {
         match &self.node_type {
-            NodeType::FunctionDefinition { arguments, .. }
-            | NodeType::VariableDefinition { arguments }
-            | NodeType::Unary { arguments, .. }
-            | NodeType::FunctionCall { arguments, .. }
-            | NodeType::Binary { arguments, .. } => arguments.as_slice(),
+            NodeType::FunctionDefinition { args, .. }
+            | NodeType::VariableDefinition { args }
+            | NodeType::Unary { args, .. }
+            | NodeType::FunctionCall { args, .. }
+            | NodeType::Binary { args, .. } => args.as_slice(),
             _ => &[],
         }
         .iter()
@@ -181,7 +181,7 @@ impl<'source> Ast<'source> {
         let mut roots: HashMap<&str, &Node> =
             nodes.iter().map(|(id, n)| (id.as_str(), n)).collect();
         for node in nodes.values() {
-            for arg in node.arguments() {
+            for arg in node.args() {
                 roots.remove(arg);
             }
         }
@@ -194,7 +194,7 @@ impl<'source> Ast<'source> {
                 if let NodeType::Param = node.node_type {
                     *current_arity += 1;
                 }
-                for child_id in node.arguments() {
+                for child_id in node.args() {
                     traverse(nodes, child_id, current_arity);
                 }
             }

@@ -1,7 +1,7 @@
 {
   "nodes": [
     {
-      "arguments": ["a", "b"],
+      "args": ["a", "b"],
       "id": "add",
       "type": "call",
       "fnNodeId": "sum"
