@@ -1,0 +1,15 @@
+{
+  "nodes": [
+    {
+      "arguments": ["lit"],
+      "id": "new_var",
+      "type": "var",
+      "name": "new_var"
+    },
+    {
+      "id": "lit",
+      "type": "literal",
+      "value": 7
+    }
+  ]
+}
