@@ -78,7 +78,7 @@ impl Value {
             return Value::List(vm.alloc(List::new(values)));
         }
 
-        return match self {
+        match self {
             Value::Bool(a) => match rhs {
                 Value::Bool(b) => Value::Number(a as i32 as f64 + b as i32 as f64),
                 Value::Number(b) => Value::Number(a as i32 as f64 + b),
@@ -108,7 +108,7 @@ impl Value {
             Value::NativeFunction(_) | Value::Function(_) | Value::List(_) | Value::Nil => {
                 unreachable!()
             }
-        };
+        }
     }
 
     pub fn binary_op(self, rhs: Self, f: impl Fn(f64, f64) -> Value) -> Result<Self> {
