@@ -11,7 +11,7 @@ debug_log_gc = []
 debug_stress_gc = []
 
 [dependencies]
-serde = { version = "1.0.145", features = ["derive"] }
+serde = { version = "1.0.147", features = ["derive"] }
 
 [dev-dependencies]
 serde_json = "1.0.87"
