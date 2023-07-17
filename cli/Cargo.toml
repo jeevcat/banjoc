@@ -9,4 +9,4 @@ path = "src/main.rs"
 
 [dependencies]
 banjoc = { path = "../banjoc" }
-serde_json = "1.0.102"
+serde_json = "1.0.103"
